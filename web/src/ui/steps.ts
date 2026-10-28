@@ -110,10 +110,10 @@ function hostStep(c: StepContext): HTMLElement[] {
     photoGrid(
       c.library,
       {
-        role: "person",
+        role: "host",
         chosen: new Set(host ? [host.photo.photoId] : []),
         verb: "Conductor",
-        empty: "Todavía no hay fotos de personas. Sube una para empezar.",
+        empty: "Todavía no hay fotos de conductores. Sube una para empezar.",
         pick: (photo) => {
           store.commit(setHost(store.doc, photoRef(photo)));
           announce("Conductor elegido. Sigue con «Siguiente».");
@@ -122,7 +122,7 @@ function hostStep(c: StepContext): HTMLElement[] {
       },
       c.refresh,
     ),
-    uploadButton(c.library, "person", c.rerender, c.refresh),
+    uploadButton(c.library, "host", c.rerender, c.refresh),
     advanced("host", host ? personControls(store, host) : h("p", { class: "muted" }, "Elige primero al conductor.")),
   ];
 }
@@ -144,10 +144,10 @@ function guestsStep(c: StepContext): HTMLElement[] {
     photoGrid(
       c.library,
       {
-        role: "person",
+        role: "guest",
         chosen: new Set(guests.map((g) => g.photo.photoId)),
         verb: "Invitado",
-        empty: "Todavía no hay fotos de personas. Sube una para empezar.",
+        empty: "Todavía no hay fotos de invitados. Sube una o dos para empezar.",
         pick: (photo) => {
           if (host?.photo.photoId === photo.id) {
             announce("Esa foto ya es la del conductor.");
@@ -162,7 +162,7 @@ function guestsStep(c: StepContext): HTMLElement[] {
       },
       c.refresh,
     ),
-    uploadButton(c.library, "person", c.rerender, c.refresh),
+    uploadButton(c.library, "guest", c.rerender, c.refresh),
     advanced(
       "guests",
       ...(guests.length ? guests.map((g) => personControls(store, g)) : [h("p", { class: "muted" }, "Elige primero a los invitados.")]),

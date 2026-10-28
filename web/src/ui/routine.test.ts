@@ -18,15 +18,16 @@ const photo = (id: string, role: Photo["role"]): Photo => ({
 });
 
 describe("a new thumbnail starts like every day", () => {
-  const library = [photo("frame-new", "frame"), photo("frame-old", "frame"), photo("logo", "logo"), photo("host", "person"), photo("guest", "person")];
+  const library = [photo("frame-new", "frame"), photo("frame-old", "frame"), photo("logo", "logo"), photo("host", "host"), photo("guest", "guest")];
 
-  it("puts on the newest frame and logo the first time", () => {
+  it("puts on the newest frame, logo and host photo the first time", () => {
     const doc = startOfDay(null, library);
     const kinds = doc.layers.map((l) => l.kind);
     expect(kinds.at(-1)).toBe("frame");
     expect(doc.layers.at(-1)).toMatchObject({ kind: "frame", photo: { photoId: "frame-new" } });
     expect(kinds).toContain("logo");
-    expect(people(doc)).toHaveLength(0);
+    expect(people(doc, "host").map((p) => p.photo.photoId)).toEqual(["host"]);
+    expect(people(doc, "guest")).toHaveLength(0);
     expect(validateDocument(doc).ok).toBe(true);
   });
 
@@ -45,8 +46,13 @@ describe("a new thumbnail starts like every day", () => {
     let yesterday = addPerson(newDocument(), { photoId: "gone", src: "/x.png", width: 4, height: 8 }, "host");
     yesterday = setFrame(yesterday, { photoId: "gone-frame", src: "/f.png", width: 1280, height: 720 });
     const doc = startOfDay(yesterday, library);
-    expect(people(doc, "host")).toHaveLength(0);
+    expect(people(doc, "host").map((p) => p.photo.photoId)).toEqual(["host"]);
     expect(doc.layers.at(-1)).toMatchObject({ kind: "frame", photo: { photoId: "frame-new" } });
+  });
+
+  it("never puts a guest photo in the host's place", () => {
+    const onlyGuests = [photo("guest", "guest")];
+    expect(people(startOfDay(null, onlyGuests))).toHaveLength(0);
   });
 });
 

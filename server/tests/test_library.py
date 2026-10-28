@@ -155,9 +155,9 @@ def test_only_files_of_the_library_are_served(client, settings):
 
 
 def test_a_person_with_transparency_is_trimmed_to_their_pixels(client):
-    photo = upload(client, "person", ("p.png", person_with_padding(), "image/png")).json()[
-        "photos"
-    ][0]
+    photo = upload(client, "guest", ("p.png", person_with_padding(), "image/png")).json()["photos"][
+        0
+    ]
     # Faint specks in the corners do not count: the box is the person.
     assert (photo["width"], photo["height"]) == (40, 60)
     assert photo["original_url"] != photo["url"]
@@ -183,3 +183,23 @@ def test_the_built_frontend_is_served_from_the_same_origin(client):
 
 def test_the_page_revalidates_so_a_phone_never_keeps_an_old_version(client):
     assert client.get("/").headers["cache-control"] == "no-cache"
+
+
+def test_people_are_hosts_or_guests_and_each_step_lists_its_own(client):
+    upload(client, "host", ("h.png", png(color=(1, 1, 1, 255)), "image/png"))
+    upload(client, "guest", ("g.png", png(color=(2, 2, 2, 255)), "image/png"))
+    hosts = client.get("/api/photos", params={"role": "host"}).json()["photos"]
+    guests = client.get("/api/photos", params={"role": "guest"}).json()["photos"]
+    assert [p["role"] for p in hosts] == ["host"]
+    assert [p["role"] for p in guests] == ["guest"]
+    assert upload(client, "person", ("p.png", png(), "image/png")).status_code == 422
+
+
+def test_a_person_uploaded_in_the_wrong_step_can_move_between_host_and_guest(client):
+    photo = upload(client, "guest", ("g.png", png(), "image/png")).json()["photos"][0]
+    moved = client.patch(f"/api/photos/{photo['id']}", json={"role": "host"})
+    assert moved.status_code == 200
+    assert moved.json()["role"] == "host"
+    background = upload(client, "background", ("b.png", jpeg(), "image/jpeg")).json()["photos"][0]
+    assert client.patch(f"/api/photos/{background['id']}", json={"role": "host"}).status_code == 422
+    assert client.patch(f"/api/photos/{photo['id']}", json={"role": "logo"}).status_code == 422

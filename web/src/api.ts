@@ -2,7 +2,10 @@
 
 import type { PhotoRef } from "./document/types";
 
-export type Role = "background" | "person" | "logo" | "frame";
+export type Role = "background" | "host" | "guest" | "logo" | "frame";
+export type PersonRole = "host" | "guest";
+
+export const isPersonRole = (role: Role): role is PersonRole => role === "host" || role === "guest";
 
 export interface Photo {
   id: string;
@@ -67,6 +70,17 @@ export async function uploadPhotos(role: Role, files: readonly File[]): Promise<
 export async function deletePhoto(id: string): Promise<void> {
   const response = await fetch(`/api/photos/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!response.ok && response.status !== 404) await json(response);
+}
+
+/** Moves a person between host and guest (uploaded in the wrong step). */
+export async function setRole(id: string, role: PersonRole): Promise<Photo> {
+  return json<Photo>(
+    await fetch(`/api/photos/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ role }),
+    }),
+  );
 }
 
 export async function cutOut(id: string): Promise<Photo> {

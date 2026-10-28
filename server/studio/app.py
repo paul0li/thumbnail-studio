@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from studio import library, storage
 from studio.config import Settings
@@ -13,6 +14,10 @@ from studio.cutout import CutoutProvider, build_provider
 from studio.db import Database
 
 log = logging.getLogger("studio")
+
+
+class RoleChange(BaseModel):
+    role: str
 
 
 class WebFiles(StaticFiles):
@@ -89,6 +94,10 @@ def create_app(settings: Settings | None = None, provider: CutoutProvider | None
     def delete_photo(photo_id: str) -> Response:
         library.delete(db, photo_id)
         return Response(status_code=204)
+
+    @app.patch("/api/photos/{photo_id}")
+    def change_role(photo_id: str, body: RoleChange) -> dict:
+        return library.set_role(db, photo_id, body.role).as_json()
 
     @app.post("/api/photos/{photo_id}/cutout")
     def cut_out(photo_id: str) -> dict:
