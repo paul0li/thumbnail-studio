@@ -1,0 +1,91 @@
+{
+  "description": "The title after choosing the «Caja roja» preset.",
+  "valid": true,
+  "document": {
+    "version": 1,
+    "width": 1280,
+    "height": 720,
+    "layers": [
+      {
+        "id": "background-1",
+        "kind": "background",
+        "photo": null,
+        "tone": "dark",
+        "flipX": false
+      },
+      {
+        "id": "title-2",
+        "kind": "title",
+        "text": "HOY HABLAMOS DE ESTO",
+        "words": [
+          {
+            "text": "HOY",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": {
+              "color": "#E92827"
+            },
+            "breakBefore": false
+          },
+          {
+            "text": "HABLAMOS",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": {
+              "color": "#E92827"
+            },
+            "breakBefore": false
+          },
+          {
+            "text": "DE",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": {
+              "color": "#E92827"
+            },
+            "breakBefore": false
+          },
+          {
+            "text": "ESTO",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": {
+              "color": "#E92827"
+            },
+            "breakBefore": false
+          }
+        ],
+        "autoBreaks": true,
+        "align": "left",
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "effects": [
+          {
+            "type": "dropShadow",
+            "color": "#000000",
+            "opacity": 0.6,
+            "x": 0,
+            "y": 8,
+            "blur": 16,
+            "spread": 0
+          }
+        ],
+        "accent": null,
+        "preset": "red-box"
+      }
+    ]
+  }
+}

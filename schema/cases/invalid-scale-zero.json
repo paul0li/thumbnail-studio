@@ -1,0 +1,201 @@
+{
+  "description": "A person drawn at scale 0.",
+  "valid": false,
+  "document": {
+    "version": 1,
+    "width": 1280,
+    "height": 720,
+    "layers": [
+      {
+        "id": "background-1",
+        "kind": "background",
+        "photo": {
+          "photoId": "bg",
+          "src": "/api/files/aa/bg.png",
+          "width": 1920,
+          "height": 1080
+        },
+        "tone": "dark",
+        "flipX": false
+      },
+      {
+        "id": "person-2",
+        "kind": "person",
+        "slot": "host",
+        "photo": {
+          "photoId": "host",
+          "src": "/api/files/aa/host.png",
+          "width": 500,
+          "height": 900
+        },
+        "x": 1113.3333333333333,
+        "y": 420,
+        "scale": 0,
+        "flipX": false,
+        "effects": [
+          {
+            "type": "halo",
+            "color": "#FFD400",
+            "opacity": 0.6,
+            "size": 1.2
+          },
+          {
+            "type": "rimLight",
+            "color": "#FFFFFF",
+            "opacity": 0.8,
+            "width": 8,
+            "angle": 45
+          }
+        ]
+      },
+      {
+        "id": "person-3",
+        "kind": "person",
+        "slot": "guest",
+        "photo": {
+          "photoId": "guest1",
+          "src": "/api/files/aa/guest1.png",
+          "width": 400,
+          "height": 800
+        },
+        "x": 130,
+        "y": 500,
+        "scale": 0.55,
+        "flipX": false,
+        "effects": [
+          {
+            "type": "dropShadow",
+            "color": "#000000",
+            "opacity": 0.5,
+            "x": 0,
+            "y": 8,
+            "blur": 20,
+            "spread": 0
+          },
+          {
+            "type": "glow",
+            "color": "#E92827",
+            "opacity": 1,
+            "blur": 30
+          },
+          {
+            "type": "outline",
+            "color": "#ffffff",
+            "width": 4
+          }
+        ]
+      },
+      {
+        "id": "person-4",
+        "kind": "person",
+        "slot": "guest",
+        "photo": {
+          "photoId": "guest2",
+          "src": "/api/files/aa/guest2.png",
+          "width": 420,
+          "height": 760
+        },
+        "x": 321.57894736842104,
+        "y": 500,
+        "scale": 0.5789473684210527,
+        "flipX": false,
+        "effects": []
+      },
+      {
+        "id": "title-5",
+        "kind": "title",
+        "text": "NADIE LO VIO",
+        "words": [
+          {
+            "text": "NADIE",
+            "size": 140,
+            "fill": {
+              "type": "gradient",
+              "from": "#FFD400",
+              "to": "#E92827",
+              "angle": 90
+            },
+            "box": null,
+            "breakBefore": false
+          },
+          {
+            "text": "LO",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": {
+              "color": "#E92827"
+            },
+            "breakBefore": true
+          },
+          {
+            "text": "VIO",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": null,
+            "breakBefore": false
+          }
+        ],
+        "autoBreaks": false,
+        "align": "center",
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "effects": [
+          {
+            "type": "dropShadow",
+            "color": "#000000",
+            "opacity": 0.75,
+            "x": 0,
+            "y": 6,
+            "blur": 14,
+            "spread": 0
+          },
+          {
+            "type": "outline",
+            "color": "#000000",
+            "width": 7
+          }
+        ],
+        "accent": "#E92827",
+        "preset": "brand"
+      },
+      {
+        "id": "logo-6",
+        "kind": "logo",
+        "photo": {
+          "photoId": "logo",
+          "src": "/api/files/aa/logo.png",
+          "width": 600,
+          "height": 300
+        },
+        "x": 170,
+        "y": 105,
+        "scale": 0.36666666666666664,
+        "effects": [
+          {
+            "type": "glow",
+            "color": "#FFFFFF",
+            "opacity": 0.7,
+            "blur": 12
+          }
+        ]
+      },
+      {
+        "id": "frame-7",
+        "kind": "frame",
+        "photo": {
+          "photoId": "frame",
+          "src": "/api/files/aa/frame.png",
+          "width": 1280,
+          "height": 720
+        }
+      }
+    ]
+  }
+}

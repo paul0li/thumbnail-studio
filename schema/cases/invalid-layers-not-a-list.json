@@ -1,0 +1,10 @@
+{
+  "description": "Layers that are not a list.",
+  "valid": false,
+  "document": {
+    "version": 1,
+    "width": 1280,
+    "height": 720,
+    "layers": {}
+  }
+}

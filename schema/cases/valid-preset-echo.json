@@ -1,0 +1,97 @@
+{
+  "description": "The title after choosing the «Eco» preset.",
+  "valid": true,
+  "document": {
+    "version": 1,
+    "width": 1280,
+    "height": 720,
+    "layers": [
+      {
+        "id": "background-1",
+        "kind": "background",
+        "photo": null,
+        "tone": "dark",
+        "flipX": false
+      },
+      {
+        "id": "title-2",
+        "kind": "title",
+        "text": "HOY HABLAMOS DE ESTO",
+        "words": [
+          {
+            "text": "HOY",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": null,
+            "breakBefore": false
+          },
+          {
+            "text": "HABLAMOS",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": null,
+            "breakBefore": false
+          },
+          {
+            "text": "DE",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": null,
+            "breakBefore": false
+          },
+          {
+            "text": "ESTO",
+            "size": 80,
+            "fill": {
+              "type": "solid",
+              "color": "#FFFFFF"
+            },
+            "box": null,
+            "breakBefore": false
+          }
+        ],
+        "autoBreaks": true,
+        "align": "left",
+        "x": 50,
+        "y": 50,
+        "scale": 1,
+        "effects": [
+          {
+            "type": "dropShadow",
+            "color": "#E92827",
+            "opacity": 1,
+            "x": 8,
+            "y": 8,
+            "blur": 0,
+            "spread": 0
+          },
+          {
+            "type": "dropShadow",
+            "color": "#FFD400",
+            "opacity": 1,
+            "x": 16,
+            "y": 16,
+            "blur": 0,
+            "spread": 0
+          },
+          {
+            "type": "outline",
+            "color": "#000000",
+            "width": 4
+          }
+        ],
+        "accent": null,
+        "preset": "echo"
+      }
+    ]
+  }
+}
