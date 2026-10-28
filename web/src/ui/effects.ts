@@ -2,7 +2,7 @@
 // tap, the numbers tucked under «Ajustar».
 
 import { BRAND, EFFECTS_FOR, type Effect, type EffectHost, type EffectType } from "../document/types";
-import { h } from "./dom";
+import { announce, h } from "./dom";
 
 export const EFFECT_NAMES: Record<EffectType, string> = {
   dropShadow: "Sombra",
@@ -71,18 +71,38 @@ const openDetails = new Set<string>();
 
 export type EffectsChange = (effects: Effect[], options: { key?: string; quiet?: boolean }) => void;
 
+/** Light colours get a dark check mark, dark ones a light one. */
+const LIGHT = new Set([BRAND.white.toLowerCase(), BRAND.yellow.toLowerCase()]);
+
+/** A colour button: named in Spanish, pressed when chosen, and marked with a
+ *  check, so the choice is never told by colour alone. */
+export function swatch(name: string, background: string, active: boolean, light: boolean, onPick: () => void): HTMLElement {
+  return h(
+    "button",
+    {
+      type: "button",
+      class: `swatch${active ? " active" : ""}${light ? " light" : ""}`,
+      style: { background },
+      "aria-label": name,
+      "aria-pressed": String(active),
+      title: name,
+      on: {
+        click: () => {
+          onPick();
+          announce(`Color: ${name}`);
+        },
+      },
+    },
+    h("span", { "aria-hidden": "true" }, active ? "✓" : ""),
+  );
+}
+
 export function swatchRow(current: string, onPick: (color: string) => void): HTMLElement {
   return h(
     "div",
-    { class: "swatches" },
+    { class: "swatches", role: "group", "aria-label": "Color" },
     ...SWATCHES.map((s) =>
-      h("button", {
-        class: `swatch${s.color.toLowerCase() === current.toLowerCase() ? " active" : ""}`,
-        style: { background: s.color },
-        "aria-label": s.name,
-        title: s.name,
-        on: { click: () => onPick(s.color) },
-      }),
+      swatch(s.name, s.color, s.color.toLowerCase() === current.toLowerCase(), LIGHT.has(s.color.toLowerCase()), () => onPick(s.color)),
     ),
   );
 }
@@ -92,25 +112,49 @@ export function effectsEditor(effects: readonly Effect[], host: EffectHost, onCh
 
   const cards = effects.map((effect, index) => {
     const sliders = PARAMS[effect.type].map((p) => {
-      const value = (effect as unknown as Record<string, number>)[p.key] ?? 0;
-      const output = h("output", {}, format(value, p.step));
+      let value = (effect as unknown as Record<string, number>)[p.key] ?? 0;
+      const output = h("output", { "aria-hidden": "true" }, format(value, p.step));
+      const id = `fx-${host}-${index}-${p.key}`;
+      const set = (v: number) => {
+        value = Math.min(p.max, Math.max(p.min, Math.round(v / p.step) * p.step));
+        output.textContent = format(value, p.step);
+        input.value = String(value);
+        effects = replace(index, { ...effects[index]!, [p.key]: value } as Effect);
+        onChange(effects as Effect[], { key: `effect-${index}-${p.key}`, quiet: true });
+      };
       const input = h("input", {
+        id,
         type: "range",
         min: String(p.min),
         max: String(p.max),
         step: String(p.step),
         value: String(value),
-        "aria-label": p.label,
-        on: {
-          input: (event: Event) => {
-            const v = Number((event.target as HTMLInputElement).value);
-            output.textContent = format(v, p.step);
-            effects = replace(index, { ...effects[index]!, [p.key]: v } as Effect);
-            onChange(effects as Effect[], { key: `effect-${index}-${p.key}`, quiet: true });
-          },
-        },
+        on: { input: (event: Event) => set(Number((event.target as HTMLInputElement).value)) },
       });
-      return h("label", { class: "slider" }, h("span", {}, p.label), input, output);
+      // A slider is hard with a tremor: buttons move it a twentieth at a time.
+      const big = Math.max(p.step, (p.max - p.min) / 20);
+      const stepButton = (sign: 1 | -1) =>
+        h(
+          "button",
+          {
+            type: "button",
+            class: "button step",
+            "aria-label": `${sign > 0 ? "Más" : "Menos"} ${p.label.toLowerCase()}`,
+            on: {
+              click: () => {
+                set(value + sign * big);
+                announce(`${p.label}: ${format(value, p.step)}`);
+              },
+            },
+          },
+          h("span", { "aria-hidden": "true" }, sign > 0 ? "+" : "−"),
+        );
+      return h(
+        "div",
+        { class: "slider" },
+        h("div", { class: "slider-head" }, h("label", { for: id }, p.label), output),
+        h("div", { class: "slider-row" }, stepButton(-1), input, stepButton(1)),
+      );
     });
     return h(
       "div",
@@ -118,12 +162,19 @@ export function effectsEditor(effects: readonly Effect[], host: EffectHost, onCh
       h(
         "div",
         { class: "effect-head" },
-        h("strong", {}, EFFECT_NAMES[effect.type]),
+        h("h3", {}, EFFECT_NAMES[effect.type]),
         h(
           "button",
           {
-            class: "link danger",
-            on: { click: () => onChange(effects.filter((_, i) => i !== index), {}) },
+            type: "button",
+            class: "button small danger",
+            "aria-label": `Quitar ${EFFECT_NAMES[effect.type].toLowerCase()}`,
+            on: {
+              click: () => {
+                onChange(effects.filter((_, i) => i !== index), {});
+                announce(`Efecto quitado: ${EFFECT_NAMES[effect.type]}. «Deshacer» lo devuelve.`);
+              },
+            },
           },
           "Quitar",
         ),
@@ -153,7 +204,16 @@ export function effectsEditor(effects: readonly Effect[], host: EffectHost, onCh
     ...EFFECTS_FOR[host].map((type) =>
       h(
         "button",
-        { class: "chip", on: { click: () => onChange([...effects, newEffect(type, host)], {}) } },
+        {
+          type: "button",
+          class: "chip",
+          on: {
+            click: () => {
+              onChange([...effects, newEffect(type, host)], {});
+              announce(`Efecto añadido: ${EFFECT_NAMES[type]}`);
+            },
+          },
+        },
         `+ ${EFFECT_NAMES[type]}`,
       ),
     ),
@@ -161,8 +221,8 @@ export function effectsEditor(effects: readonly Effect[], host: EffectHost, onCh
 
   return h(
     "section",
-    { class: "group" },
-    h("h3", {}, "Efectos"),
+    { class: "group", "aria-labelledby": `effects-${host}` },
+    h("h2", { id: `effects-${host}` }, "Efectos"),
     cards.length ? h("div", { class: "effect-list" }, ...cards) : h("p", { class: "muted" }, "Sin efectos."),
     add,
   );

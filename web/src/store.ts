@@ -39,7 +39,10 @@ function saveDraft(doc: DesignDocument): void {
 }
 
 export class Store {
-  doc: DesignDocument = loadDraft() ?? newDocument();
+  private readonly draft = loadDraft();
+  /** Whether the editor opened on yesterday's unfinished draft. */
+  readonly fromDraft = this.draft !== null;
+  doc: DesignDocument = this.draft ?? newDocument();
   selection: Selection = null;
   private history: DesignDocument[] = [];
   private lastKey: string | undefined;
@@ -93,8 +96,15 @@ export class Store {
     this.notify(false);
   }
 
-  reset(): void {
-    this.commit(newDocument());
+  /** Opens a document as the starting point, with nothing to undo before it. */
+  begin(doc: DesignDocument): void {
+    const result = validateDocument(doc);
+    if (!result.ok) return;
+    this.history = [];
+    this.lastKey = undefined;
+    this.doc = doc;
     this.selection = null;
+    saveDraft(doc);
+    this.notify(false);
   }
 }

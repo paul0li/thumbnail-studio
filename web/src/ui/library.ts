@@ -1,213 +1,166 @@
-// «Fotos»: the library by role. Tapping a photo puts it in the thumbnail.
+// The photo library as the steps use it: a grid to pick from, a button to add
+// a new photo, and a sheet with the rarer actions (cut out, delete).
 
-import { ApiError, cutOut, deletePhoto, photoRef, uploadPhotos, type Config, type Photo, type Role } from "../api";
-import {
-  addPerson,
-  background,
-  flipLayer,
-  photosInUse,
-  replacePhoto,
-  setBackgroundPhoto,
-  setBackgroundTone,
-  setFrame,
-  setLogo,
-} from "../document/edit";
-import type { Store } from "../store";
-import { h, toast } from "./dom";
-
-const ROLE_LABELS: Record<Role, string> = {
-  background: "Fondo",
-  person: "Personas",
-  logo: "Logo",
-  frame: "Marco",
-};
-
-const ROLE_HINTS: Record<Role, string> = {
-  background: "Se ve a sangre completa detrás de todo.",
-  person: "Toca una foto para ponerla en la miniatura. Puedes poner varias.",
-  logo: "Va encima de las fotos y se puede mover.",
-  frame: "Va siempre encima de todo, a sangre completa.",
-};
+import { ApiError, cutOut, deletePhoto, uploadPhotos, type Config, type Photo, type Role } from "../api";
+import { announce, h, toast } from "./dom";
 
 export interface LibraryState {
-  role: Role;
   photos: Photo[];
   config: Config | null;
+  /** What is uploading, said on the button while it lasts. */
   busy: string | null;
 }
 
-export function libraryPanel(store: Store, state: LibraryState, refresh: () => Promise<void>, rerender: () => void): HTMLElement {
-  const role = state.role;
-  const inUse = photosInUse(store.doc);
-  const photos = state.photos.filter((p) => p.role === role);
+export interface GridOptions {
+  role: Role;
+  /** Photo ids that are in the thumbnail now. */
+  chosen: ReadonlySet<string>;
+  /** Tapping a photo. */
+  pick: (photo: Photo) => void;
+  /** Said on each tile, e.g. «Conductor». */
+  verb: string;
+  empty: string;
+  /** After a cut-out, the thumbnail switches to the cut version. */
+  onCutOut: (photo: Photo) => void;
+}
+
+export function photoGrid(state: LibraryState, options: GridOptions, refresh: () => Promise<void>): HTMLElement {
+  const photos = state.photos.filter((p) => p.role === options.role);
+  if (!photos.length) return h("p", { class: "note" }, options.empty);
   const cutoutReady = Boolean(state.config?.cutout.available);
+  return h(
+    "ul",
+    { class: "grid", role: "list" },
+    ...photos.map((photo, i) => {
+      const chosen = options.chosen.has(photo.id);
+      return h(
+        "li",
+        { class: `tile${chosen ? " in-use" : ""}${options.role !== "background" ? " checker" : ""}` },
+        h(
+          "button",
+          {
+            type: "button",
+            class: "tile-use",
+            "aria-pressed": String(chosen),
+            on: { click: () => options.pick(photo) },
+          },
+          h("img", { src: photo.url, alt: `${options.verb}: foto ${i + 1}`, loading: "lazy", decoding: "async" }),
+          chosen ? h("span", { class: "badge" }, "✓ Elegida") : null,
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            class: "tile-more",
+            "data-photo": photo.id,
+            "aria-label": `Opciones de la foto ${i + 1}`,
+            "aria-haspopup": "dialog",
+            on: { click: () => openPhotoSheet(photo, i + 1, cutoutReady, refresh, options.onCutOut) },
+          },
+          h("span", { "aria-hidden": "true" }, "⋯"),
+        ),
+      );
+    }),
+  );
+}
 
-  const use = (photo: Photo) => {
-    const ref = photoRef(photo);
-    let doc = store.doc;
-    if (role === "background") doc = setBackgroundPhoto(doc, ref);
-    if (role === "person") doc = addPerson(doc, ref);
-    if (role === "logo") doc = setLogo(doc, ref);
-    if (role === "frame") doc = setFrame(doc, ref);
-    store.commit(doc);
-    if (role === "person") {
-      const added = store.doc.layers.filter((l) => l.kind === "person").at(-1);
-      if (added) store.select({ layerId: added.id, word: null });
-    }
-  };
-
-  const upload = async (files: File[]) => {
+/** «Subir una foto nueva»: a real button (a label is not reachable by keyboard
+ *  and VoiceOver does not call it a button) that opens the file picker. */
+export function uploadButton(
+  state: LibraryState,
+  role: Role,
+  rerender: () => void,
+  refresh: () => Promise<void>,
+  onUploaded?: (photos: Photo[]) => void,
+): HTMLElement {
+  const input = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", multiple: role === "person", hidden: true });
+  input.addEventListener("change", async () => {
+    const files = Array.from(input.files ?? []);
+    input.value = "";
     if (!files.length) return;
     state.busy = files.length === 1 ? "Subiendo la foto…" : `Subiendo ${files.length} fotos…`;
     rerender();
+    announce(state.busy);
+    let uploaded: Photo[] = [];
     try {
       const result = await uploadPhotos(role, files);
-      for (const e of result.errors) toast(`${e.filename ?? "Archivo"}: ${e.detail}`);
-      if (result.photos.length) toast(result.photos.length === 1 ? "Foto subida." : `${result.photos.length} fotos subidas.`);
+      uploaded = result.photos;
+      const failed = result.errors.map((e) => `${e.filename ?? "Archivo"}: ${e.detail}`);
+      const done = uploaded.length ? (uploaded.length === 1 ? "Foto subida." : `${uploaded.length} fotos subidas.`) : "";
+      if (failed.length) toast([done, `No se pudo subir: ${failed.join(" ")}`].filter(Boolean).join(" "), { error: true });
+      else if (done) toast(done);
     } catch (error) {
-      toast(error instanceof ApiError ? error.message : "No se pudo subir. ¿Hay conexión?");
+      toast(
+        error instanceof ApiError
+          ? `No se pudo subir: ${error.message}`
+          : "No se pudo subir la foto. Revisa la conexión y vuelve a intentarlo.",
+        { error: true },
+      );
     } finally {
       state.busy = null;
       await refresh();
     }
-  };
-
-  const tabs = h(
-    "div",
-    { class: "segmented", role: "tablist" },
-    ...(Object.keys(ROLE_LABELS) as Role[]).map((r) =>
-      h(
-        "button",
-        {
-          role: "tab",
-          "aria-selected": String(r === role),
-          class: r === role ? "active" : "",
-          on: {
-            click: () => {
-              state.role = r;
-              rerender();
-            },
-          },
-        },
-        ROLE_LABELS[r],
-      ),
-    ),
-  );
-
-  const input = h("input", {
-    type: "file",
-    accept: "image/png,image/jpeg,image/webp",
-    multiple: true,
-    hidden: true,
-    on: {
-      change: (event: Event) => {
-        const target = event.target as HTMLInputElement;
-        void upload(Array.from(target.files ?? []));
-        target.value = "";
-      },
-    },
+    if (uploaded.length) onUploaded?.(uploaded);
   });
-  const uploadButton = h(
-    "label",
-    { class: `button primary${state.busy ? " disabled" : ""}` },
-    state.busy ?? `Subir ${role === "person" ? "fotos" : "foto"}`,
-    input,
-  );
-
-  const extras: HTMLElement[] = [];
-  if (role === "background") {
-    const bg = background(store.doc);
-    extras.push(
-      h(
-        "div",
-        { class: "chips" },
-        h("button", { class: `chip${!bg.photo && bg.tone === "dark" ? " active" : ""}`, on: { click: () => store.commit(setBackgroundTone(setBackgroundPhoto(store.doc, null), "dark")) } }, "Sin foto: oscuro"),
-        h("button", { class: `chip${!bg.photo && bg.tone === "light" ? " active" : ""}`, on: { click: () => store.commit(setBackgroundTone(setBackgroundPhoto(store.doc, null), "light")) } }, "Sin foto: claro"),
-        bg.photo ? h("button", { class: "chip", on: { click: () => store.commit(flipLayer(store.doc, bg.id)) } }, "Voltear fondo") : null,
-      ),
-    );
-  }
-  if (role === "logo" && store.doc.layers.some((l) => l.kind === "logo")) {
-    extras.push(h("div", { class: "chips" }, h("button", { class: "chip", on: { click: () => store.commit(setLogo(store.doc, null)) } }, "Quitar el logo")));
-  }
-  if (role === "frame" && store.doc.layers.some((l) => l.kind === "frame")) {
-    extras.push(h("div", { class: "chips" }, h("button", { class: "chip", on: { click: () => store.commit(setFrame(store.doc, null)) } }, "Quitar el marco")));
-  }
-  if (role === "person" && !cutoutReady) {
-    extras.push(
-      h("p", { class: "note" }, "El recorte automático no está activo en este equipo: sube fotos ya recortadas (PNG con fondo transparente)."),
-    );
-  }
-
-  const grid = photos.length
-    ? h(
-        "div",
-        { class: "grid" },
-        ...photos.map((photo) =>
-          h(
-            "div",
-            { class: `tile${inUse.has(photo.id) ? " in-use" : ""}${role === "person" ? " checker" : ""}` },
-            h(
-              "button",
-              { class: "tile-use", "aria-label": "Usar esta foto", on: { click: () => use(photo) } },
-              h("img", { src: photo.url, alt: "", loading: "lazy", decoding: "async" }),
-              inUse.has(photo.id) ? h("span", { class: "badge" }, "En uso") : null,
-            ),
-            h(
-              "button",
-              { class: "tile-more", "aria-label": "Más opciones", on: { click: () => openPhotoSheet(photo, cutoutReady, () => use(photo), refresh, (cut) => store.commit(replacePhoto(store.doc, photoRef(cut)))) } },
-              "⋯",
-            ),
-          ),
-        ),
-      )
-    : h("p", { class: "muted" }, "Todavía no hay fotos aquí.");
-
   return h(
     "div",
-    { class: "panel-body" },
-    tabs,
-    h("p", { class: "muted" }, ROLE_HINTS[role]),
-    h("div", { class: "row" }, uploadButton),
-    ...extras,
-    grid,
+    { class: "row" },
+    h(
+      "button",
+      {
+        type: "button",
+        class: "button",
+        "aria-disabled": String(Boolean(state.busy)),
+        on: { click: () => (state.busy ? announce(state.busy) : input.click()) },
+      },
+      state.busy ?? (role === "person" ? "Subir fotos nuevas" : "Subir una foto nueva"),
+    ),
+    input,
   );
 }
 
 function openPhotoSheet(
   photo: Photo,
+  number: number,
   cutoutReady: boolean,
-  use: () => void,
   refresh: () => Promise<void>,
   onCutOut: (photo: Photo) => void,
 ): void {
-  const dialog = h("dialog", { class: "sheet" });
-  const close = () => {
-    dialog.close();
-    dialog.remove();
+  const dialog = h("dialog", { class: "sheet", "aria-labelledby": "sheet-title" });
+  const status = h("p", { class: "note", role: "status" });
+  status.hidden = true;
+  const say = (message: string) => {
+    status.hidden = false;
+    status.textContent = message;
   };
-  const actions: HTMLElement[] = [
-    h("button", { class: "button primary", on: { click: () => { use(); close(); } } }, "Usar en la miniatura"),
-  ];
+  const close = () => dialog.close();
+  // Back to the «⋯» that opened it, found again in case the panel was redrawn.
+  dialog.addEventListener("close", () => {
+    dialog.remove();
+    document.querySelector<HTMLElement>(`.tile-more[data-photo="${photo.id}"]`)?.focus();
+  });
+  const actions: HTMLElement[] = [];
   if (photo.role === "person") {
     if (!cutoutReady) {
-      actions.push(h("p", { class: "note" }, "El recorte automático no está activo en este equipo."));
+      actions.push(h("p", { class: "note" }, "Quitar el fondo no está disponible en este equipo. Sube una foto que ya venga recortada."));
     } else if (photo.cut_out) {
       actions.push(h("p", { class: "note" }, "Esta foto ya está recortada."));
     } else {
-      const button = h("button", { class: "button" }, "Quitar el fondo");
+      const button = h("button", { type: "button", class: "button" }, "Quitar el fondo de la foto");
       button.addEventListener("click", async () => {
-        button.textContent = "Recortando…";
-        button.setAttribute("disabled", "");
+        if (button.getAttribute("aria-disabled") === "true") return;
+        button.textContent = "Quitando el fondo…";
+        button.setAttribute("aria-disabled", "true");
+        say("Quitando el fondo. Puede tardar unos segundos.");
         try {
           onCutOut(await cutOut(photo.id));
           toast("Fondo quitado.");
           close();
           await refresh();
         } catch (error) {
-          toast(error instanceof ApiError ? error.message : "No se pudo recortar.");
-          button.textContent = "Quitar el fondo";
-          button.removeAttribute("disabled");
+          say(error instanceof ApiError ? `No se pudo quitar el fondo: ${error.message}` : "No se pudo quitar el fondo. Vuelve a intentarlo.");
+          button.textContent = "Quitar el fondo de la foto";
+          button.removeAttribute("aria-disabled");
         }
       });
       actions.push(button);
@@ -217,30 +170,34 @@ function openPhotoSheet(
     h(
       "button",
       {
+        type: "button",
         class: "button danger",
         on: {
           click: async () => {
-            if (!window.confirm("¿Eliminar esta foto de la librería? Las miniaturas que ya la usan la conservan.")) return;
+            if (!window.confirm("¿Borrar esta foto de la librería? Las miniaturas que ya la usan la conservan.")) return;
             try {
               await deletePhoto(photo.id);
-              toast("Foto eliminada.");
+              toast("Foto borrada de la librería.");
+              close();
             } catch (error) {
-              toast(error instanceof ApiError ? error.message : "No se pudo eliminar.");
+              say(error instanceof ApiError ? `No se pudo borrar: ${error.message}` : "No se pudo borrar. Vuelve a intentarlo.");
+              return;
             }
-            close();
             await refresh();
           },
         },
       },
-      "Eliminar de la librería",
+      "Borrar de la librería",
     ),
-    h("button", { class: "button ghost", on: { click: close } }, "Cerrar"),
+    // The sheet opens on its safest button, never on «Borrar».
+    h("button", { type: "button", class: "button ghost", autofocus: true, on: { click: close } }, "Cerrar"),
   );
   dialog.append(
-    h("div", { class: `sheet-preview${photo.role === "person" ? " checker" : ""}` }, h("img", { src: photo.url, alt: "" })),
+    h("h2", { id: "sheet-title" }, `Foto ${number}`),
+    h("div", { class: `sheet-preview${photo.role !== "background" ? " checker" : ""}` }, h("img", { src: photo.url, alt: "" })),
+    status,
     ...actions,
   );
-  dialog.addEventListener("cancel", () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();
 }

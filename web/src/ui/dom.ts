@@ -44,14 +44,86 @@ export function clear(el: HTMLElement): void {
 }
 
 let toastTimer: number | undefined;
-export function toast(message: string): void {
+/** A message on screen that screen readers also hear. Errors stay longer and
+ *  interrupt; a tap dismisses any message. */
+export function toast(message: string, options: { error?: boolean } = {}): void {
   let el = document.querySelector<HTMLDivElement>(".toast");
   if (!el) {
     el = h("div", { class: "toast", role: "status", "aria-live": "polite" });
+    el.addEventListener("click", () => el?.classList.remove("visible"));
     document.body.append(el);
   }
+  el.setAttribute("aria-live", options.error ? "assertive" : "polite");
+  el.classList.toggle("error", Boolean(options.error));
   el.textContent = message;
   el.classList.add("visible");
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => el?.classList.remove("visible"), 3200);
+  toastTimer = window.setTimeout(() => el?.classList.remove("visible"), options.error ? 9000 : 4000);
+}
+
+let announceTimer: number | undefined;
+/** Says what just changed to screen readers, without anything on screen
+ *  («Palabra NADIE: 134 px», «Deshecho»). */
+export function announce(message: string): void {
+  let el = document.getElementById("announcer");
+  if (!el) {
+    el = h("div", { id: "announcer", class: "visually-hidden", role: "status", "aria-live": "polite" });
+    document.body.append(el);
+  }
+  const region = el;
+  // Emptying first makes the same message twice in a row be said twice.
+  region.textContent = "";
+  window.clearTimeout(announceTimer);
+  announceTimer = window.setTimeout(() => (region.textContent = message), 60);
+}
+
+const FOCUSABLE = "button, [href], input, select, textarea, summary, [tabindex]";
+
+function signature(el: Element): string {
+  return `${el.tagName}|${el.getAttribute("aria-label") ?? el.textContent?.trim() ?? ""}`;
+}
+
+/** Redraws a container without losing the keyboard or screen-reader focus:
+ *  the control that had it gets it back in the new content, if it is still
+ *  there. */
+export function keepFocus(container: HTMLElement, render: () => void): void {
+  const active = document.activeElement;
+  let key: string | null = null;
+  let nth = 0;
+  if (active && active !== document.body && container.contains(active)) {
+    key = signature(active);
+    nth = [...container.querySelectorAll(FOCUSABLE)].filter((e) => signature(e) === key).indexOf(active);
+  }
+  render();
+  if (key === null) return;
+  const matches = [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => signature(e) === key);
+  const target = matches[Math.max(0, nth)] ?? matches[0];
+  // If the control is gone (a layer was removed), the focus stays nearby
+  // instead of falling back to the top of the page.
+  if (target) target.focus({ preventScroll: true });
+  else if (container.hasAttribute("tabindex")) container.focus({ preventScroll: true });
+}
+
+// Which «Edición avanzada» sections are open survives a redraw of the panel,
+// not a reload: every day starts with them closed.
+const openAdvanced = new Set<string>();
+
+/** The closed-by-default home of everything the daily routine does not need. */
+export function advanced(key: string, ...children: (Node | null | false | undefined)[]): HTMLElement {
+  const details = h(
+    "details",
+    {
+      class: "advanced",
+      open: openAdvanced.has(key),
+      on: {
+        toggle: (event: Event) => {
+          if ((event.target as HTMLDetailsElement).open) openAdvanced.add(key);
+          else openAdvanced.delete(key);
+        },
+      },
+    },
+    h("summary", {}, "Edición avanzada"),
+    h("div", { class: "panel-body advanced-body" }, ...children),
+  );
+  return details;
 }

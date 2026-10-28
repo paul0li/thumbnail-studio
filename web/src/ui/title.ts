@@ -1,13 +1,15 @@
 // «Título»: type it, pick a look, then tap a word to style it.
 
-import { title, updateTitle } from "../document/edit";
-import type { Metrics } from "../document/layout";
+import { SAMPLE_TITLE, title, updateTitle } from "../document/edit";
+import { layoutTitle, type Metrics } from "../document/layout";
 import { applyPreset, PRESETS } from "../document/presets";
 import { clampSize, retitle } from "../document/title";
 import { BRAND, type Align, type Fill, type TitleLayer, type Word } from "../document/types";
 import type { Store } from "../store";
-import { h } from "./dom";
-import { effectsEditor, swatchRow } from "./effects";
+import { advanced, announce, h } from "./dom";
+import { effectsEditor, swatch, swatchRow } from "./effects";
+import { placementControls } from "./placement";
+import { isTitleDone } from "./progress";
 
 const GRADIENTS: { name: string; fill: Fill }[] = [
   { name: "Fuego", fill: { type: "gradient", from: BRAND.yellow, to: BRAND.red, angle: 90 } },
@@ -49,28 +51,53 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
     const current = title(store.doc)!;
     const sel = store.selection?.layerId === current.id ? store.selection.word : null;
     words.replaceChildren(
-      h("button", { class: `chip${sel === null ? " active" : ""}`, on: { click: () => store.select({ layerId: current.id, word: null }) } }, "Todas"),
+      h(
+        "button",
+        {
+          type: "button",
+          class: `chip${sel === null ? " active" : ""}`,
+          "aria-pressed": String(sel === null),
+          on: { click: () => store.select({ layerId: current.id, word: null }) },
+        },
+        "Todas",
+      ),
       ...current.words.map((w, i) =>
         h(
           "button",
-          { class: `chip word${sel === i ? " active" : ""}`, on: { click: () => store.select({ layerId: current.id, word: i }) } },
-          (w.breakBefore && i > 0 ? "↵ " : "") + w.text,
+          {
+            type: "button",
+            class: `chip word${sel === i ? " active" : ""}`,
+            "aria-pressed": String(sel === i),
+            "aria-label": w.breakBefore && i > 0 ? `${w.text}, empieza línea` : w.text,
+            on: { click: () => store.select({ layerId: current.id, word: i }) },
+          },
+          h("span", { "aria-hidden": "true" }, (w.breakBefore && i > 0 ? "↵ " : "") + w.text),
         ),
       ),
     );
   };
   renderWords();
 
+  const hintText = (text: string) =>
+    isTitleDone(text) ? "El estilo de la marca ya está puesto." : "Es un ejemplo: toca y escribe el tuyo encima.";
+  const hint = h("p", { class: "muted", id: "title-sample" }, hintText(t.text));
   const input = h("textarea", {
+    id: "title-text",
     rows: 2,
     value: t.text,
     autocapitalize: "characters",
     spellcheck: false,
-    "aria-label": "Título",
-    placeholder: "Escribe el título",
+    "aria-describedby": "title-sample",
     on: {
+      // The sample title is meant to be replaced: one tap selects it all, so
+      // typing writes over it without deleting letter by letter.
+      focus: (event: Event) => {
+        const el = event.target as HTMLTextAreaElement;
+        if (el.value === SAMPLE_TITLE) el.select();
+      },
       input: (event: Event) => {
         const text = (event.target as HTMLTextAreaElement).value;
+        hint.textContent = hintText(text);
         // The words come from what was typed, never the other way round.
         change((tl) => retitle(tl, text, metrics), { key: "title-text", quiet: true });
         const current = title(store.doc)!;
@@ -84,9 +111,23 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
 
   const presets = h(
     "div",
-    { class: "chips scroll" },
+    { class: "chips", role: "group", "aria-label": "Estilo" },
     ...PRESETS.map((p) =>
-      h("button", { class: `chip${t.preset === p.id ? " active" : ""}`, on: { click: () => change((tl) => applyPreset(tl, p.id)) } }, p.label),
+      h(
+        "button",
+        {
+          type: "button",
+          class: `chip${t.preset === p.id ? " active" : ""}`,
+          "aria-pressed": String(t.preset === p.id),
+          on: {
+            click: () => {
+              change((tl) => applyPreset(tl, p.id));
+              announce(`Estilo: ${p.label}`);
+            },
+          },
+        },
+        p.label,
+      ),
     ),
   );
 
@@ -95,43 +136,72 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
   const fill = (editing ?? first)?.fill;
   const box = (editing ?? first)?.box?.color ?? null;
 
+  const sizeValue = h("span", { class: "value" }, `${Math.round(size)} px`);
+  // Quiet, so the button keeps the focus; the size is said out loud instead.
+  const resize = (sign: 1 | -1, label: string) =>
+    h(
+      "button",
+      {
+        type: "button",
+        class: "button",
+        on: {
+          click: () => {
+            changeWords((w) => ({ ...w, size: clampSize(sign > 0 ? w.size * 1.12 : w.size / 1.12) }), { key: `word-size-${selected}`, quiet: true });
+            const now = title(store.doc)!;
+            const w = now.words[targets[0] ?? 0];
+            const px = `${Math.round(w?.size ?? 0)} px`;
+            sizeValue.textContent = px;
+            announce(editing ? `Palabra ${editing.text}: ${px}` : `Todas las palabras: ${px}`);
+          },
+        },
+      },
+      label,
+    );
+
   const wordEditor = t.words.length
     ? h(
         "section",
         { class: "group" },
-        h("h3", {}, editing ? `Palabra «${editing.text}»` : "Todas las palabras"),
+        h("h2", {}, editing ? `Palabra «${editing.text}»` : "Todas las palabras"),
         h(
           "div",
           { class: "row stepper" },
-          h("button", { class: "button", "aria-label": "Más chica", on: { click: () => changeWords((w) => ({ ...w, size: clampSize(w.size / 1.12) })) } }, "A−"),
-          h("span", { class: "value" }, `${Math.round(size)} px`),
-          h("button", { class: "button", "aria-label": "Más grande", on: { click: () => changeWords((w) => ({ ...w, size: clampSize(w.size * 1.12) })) } }, "A+"),
+          resize(-1, "Letra más chica"),
+          sizeValue,
+          resize(1, "Letra más grande"),
         ),
-        h("h4", {}, "Color"),
+        h("h3", {}, "Color"),
         h(
           "div",
           { class: "row wrap" },
           swatchRow(fill?.type === "solid" ? fill.color : "", (color) => changeWords((w) => ({ ...w, fill: { type: "solid", color } }))),
           ...GRADIENTS.map((g) =>
-            h("button", {
-              class: `swatch gradient${fill && sameFill(fill, g.fill) ? " active" : ""}`,
-              style: { background: g.fill.type === "gradient" ? `linear-gradient(${g.fill.from}, ${g.fill.to})` : "" },
-              "aria-label": g.name,
-              title: g.name,
-              on: { click: () => changeWords((w) => ({ ...w, fill: g.fill })) },
-            }),
+            swatch(
+              `Degradado ${g.name.toLowerCase()}`,
+              g.fill.type === "gradient" ? `linear-gradient(${g.fill.from}, ${g.fill.to})` : "",
+              Boolean(fill && sameFill(fill, g.fill)),
+              true,
+              () => changeWords((w) => ({ ...w, fill: g.fill })),
+            ),
           ),
         ),
-        h("h4", {}, "Caja detrás"),
+        h("h3", {}, "Caja detrás"),
         h(
           "div",
-          { class: "chips" },
+          { class: "chips", role: "group", "aria-label": "Caja detrás" },
           ...BOXES.map((b) =>
             h(
               "button",
               {
+                type: "button",
                 class: `chip${box === b.color ? " active" : ""}`,
-                on: { click: () => changeWords((w) => ({ ...w, box: b.color ? { color: b.color } : null })) },
+                "aria-pressed": String(box === b.color),
+                on: {
+                  click: () => {
+                    changeWords((w) => ({ ...w, box: b.color ? { color: b.color } : null }));
+                    announce(b.color ? `Caja ${b.name.toLowerCase()}` : "Sin caja");
+                  },
+                },
               },
               b.name,
             ),
@@ -156,7 +226,7 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
                   },
                 },
               }),
-              h("span", {}, "Empezar una línea nueva aquí"),
+              h("span", {}, "Empezar una línea nueva con esta palabra"),
             )
           : null,
       )
@@ -164,23 +234,49 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
 
   const align = h(
     "div",
-    { class: "segmented" },
+    { class: "segmented", role: "group", "aria-label": "Alineación" },
     ...ALIGNS.map((a) =>
-      h("button", { class: t.align === a.align ? "active" : "", on: { click: () => change((tl) => ({ ...tl, align: a.align })) } }, a.name),
+      h(
+        "button",
+        {
+          type: "button",
+          class: t.align === a.align ? "active" : "",
+          "aria-pressed": String(t.align === a.align),
+          on: {
+            click: () => {
+              change((tl) => ({ ...tl, align: a.align }));
+              announce(`Alineado: ${a.name.toLowerCase()}`);
+            },
+          },
+        },
+        a.name,
+      ),
     ),
   );
+
+  const block = () => {
+    const current = title(store.doc)!;
+    const layout = layoutTitle(current.words, current.align, metrics);
+    return { width: layout.width, height: layout.height };
+  };
 
   return h(
     "div",
     { class: "panel-body" },
+    h("label", { class: "field-label", for: "title-text" }, "Título del episodio"),
     input,
-    h("h3", {}, "Estilo"),
-    presets,
-    h("h3", {}, "Palabras"),
-    h("p", { class: "muted" }, "Toca una palabra aquí o en la miniatura para cambiarla sola."),
-    words,
-    wordEditor,
-    h("section", { class: "group" }, h("h3", {}, "Alineación"), align),
-    effectsEditor(t.effects, "title", (effects, options) => change((tl) => ({ ...tl, effects }), options)),
+    hint,
+    advanced(
+      "title",
+      h("h2", {}, "Estilo"),
+      presets,
+      h("h2", {}, "Palabras"),
+      h("p", { class: "muted" }, "Elige una palabra para cambiarla sola."),
+      words,
+      wordEditor,
+      h("section", { class: "group" }, h("h2", {}, "Alineación"), align),
+      h("section", { class: "group" }, h("h2", {}, "Tamaño y orden"), placementControls(store, t.id, block)),
+      effectsEditor(t.effects, "title", (effects, options) => change((tl) => ({ ...tl, effects }), options)),
+    ),
   );
 }
