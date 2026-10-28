@@ -31,6 +31,7 @@ More in [`README.md`](README.md).
   - [0005 — TypeScript draws, Python does the image work](docs/adr/0005-stack.md)
   - [0006 — A Claude Code session orchestrates the improvement, with no fallback](docs/adr/0006-claude-code-orchestrates.md)
   - [0007 — A thumbnail is a layered design document with Figma-style effects](docs/adr/0007-design-document.md)
+  - [0008 — The daily thumbnail is a guided routine; fine editing is tucked away](docs/adr/0008-guided-daily-routine.md)
 - `CLAUDE.local.md` / `AGENTS.local.md` (gitignored, may not exist): facts about
   one particular installation. Read them if present; never commit them.
 
