@@ -86,10 +86,168 @@ body {
 
 .top {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+}
+
+/* «Mis miniaturas» on one side, whether it is saved on the other. */
+.top-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.top-link {
+  min-height: var(--target);
+  padding: 0 4px;
+  margin-left: -4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.save-state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.save-state.offline,
+.save-state.conflict,
+.save-state.gone {
+  color: var(--danger);
+}
+
+/* What needs the host: no connection, or a newer version elsewhere. It
+   stays until it is resolved. */
+.sync-alert {
+  padding: 0 max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+}
+
+.sync-alert[hidden] {
+  display: none;
+}
+
+.sync-message {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  padding: calc(8px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left));
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 2px solid var(--danger);
+  background: var(--surface);
+}
+
+.sync-message p {
+  margin: 0;
+}
+
+.sync-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-actions .button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* «Mis miniaturas»: one per row, large enough to recognise. */
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 12px;
+  border: 2px solid var(--edge);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.history-card.current {
+  border-color: var(--text);
+}
+
+.history-card img,
+.history-blank {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #000;
+}
+
+.history-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.history-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px;
+}
+
+.history-title {
+  font-weight: 800;
+  font-size: 1.0625rem;
+  overflow-wrap: anywhere;
+}
+
+.history-when {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.history-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.history-tags:empty {
+  display: none;
+}
+
+.tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 /* The canvas stays in view while the panel below scrolls. */
@@ -887,4 +1045,87 @@ dialog.sheet::backdrop {
     --surface: #000;
     --surface-2: #111;
   }
+}
+
+/* «Mejorar»: the steps of the wait, the one result. */
+.stage-wrap.locked .stage {
+  pointer-events: none;
+}
+
+.improve-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.improve-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--target);
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.improve-steps li.current {
+  background: var(--surface-2);
+  border: 2px solid var(--text);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.improve-steps li.done {
+  color: var(--text);
+}
+
+.improve-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+  height: 1.75em;
+  border: 2px solid var(--edge);
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+.improve-steps li.done .improve-mark {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+
+.improve-steps li.current .improve-mark {
+  border-color: var(--text);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .improve-steps li.current .improve-mark {
+    animation: improve-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes improve-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+img.improved {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.note.failure {
+  border-color: var(--danger);
 }

@@ -1,18 +1,36 @@
 """The HTTP app: the library API under `/api` and the built frontend at `/`."""
 
+import hashlib
+import json
 import logging
-from typing import Annotated
+from concurrent.futures import Executor
+from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from studio import library, storage
+from studio import faces, improve, library, storage, thumbnails
 from studio.config import Settings
 from studio.cutout import CutoutProvider, build_provider
 from studio.db import Database
+from studio.engine import ImageEngine, OpenAIImages
+from studio.readback import ClaudeCodeReader, TitleReader
 
 log = logging.getLogger("studio")
+
+
+class RoleChange(BaseModel):
+    role: str
+
+
+class ThumbnailSave(BaseModel):
+    # The version this save was made on top of; 0 creates the thumbnail.
+    base_version: int
+    # The version one undo step back from this one, if it was saved.
+    parent_version: int | None = None
+    document: Any
 
 
 class WebFiles(StaticFiles):
@@ -30,10 +48,48 @@ class WebFiles(StaticFiles):
         return response
 
 
-def create_app(settings: Settings | None = None, provider: CutoutProvider | None = None) -> FastAPI:
+def build_engine(settings: Settings) -> ImageEngine:
+    key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
+    return OpenAIImages(
+        api_key=key,
+        model=settings.openai_image_model,
+        quality=settings.openai_image_quality,
+        size=settings.openai_image_size,
+        timeout=settings.openai_timeout_seconds,
+    )
+
+
+def build_reader(settings: Settings) -> TitleReader:
+    return ClaudeCodeReader(
+        command=settings.claude_command,
+        model=settings.claude_model,
+        timeout=settings.claude_timeout_seconds,
+    )
+
+
+def create_app(
+    settings: Settings | None = None,
+    provider: CutoutProvider | None = None,
+    *,
+    engine: ImageEngine | None = None,
+    reader: TitleReader | None = None,
+    detector: faces.Detector | None = None,
+    executor: Executor | None = None,
+) -> FastAPI:
     settings = settings or Settings()
     db = Database(settings.db_path)
     cutout = provider or build_provider(settings.cutout_provider)
+    pipeline = improve.Pipeline(
+        db,
+        settings,
+        engine or build_engine(settings),
+        reader or build_reader(settings),
+        detector,
+    )
+    if executor is not None:
+        pipeline.executor = executor
+    # A run left `running` by a stopped server will never finish: say so.
+    improve.interrupted(db)
 
     app = FastAPI(title="Thumbnail Studio", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.settings = settings
@@ -41,7 +97,8 @@ def create_app(settings: Settings | None = None, provider: CutoutProvider | None
 
     @app.exception_handler(library.LibraryError)
     def library_error(_: Request, exc: library.LibraryError) -> JSONResponse:
-        return JSONResponse({"detail": exc.message}, status_code=exc.status)
+        body = exc.body() if hasattr(exc, "body") else {"detail": exc.message}
+        return JSONResponse(body, status_code=exc.status)
 
     @app.exception_handler(Exception)
     def unexpected(_: Request, exc: Exception) -> JSONResponse:
@@ -90,6 +147,10 @@ def create_app(settings: Settings | None = None, provider: CutoutProvider | None
         library.delete(db, photo_id)
         return Response(status_code=204)
 
+    @app.patch("/api/photos/{photo_id}")
+    def change_role(photo_id: str, body: RoleChange) -> dict:
+        return library.set_role(db, photo_id, body.role).as_json()
+
     @app.post("/api/photos/{photo_id}/cutout")
     def cut_out(photo_id: str) -> dict:
         return library.cut_out(db, settings, cutout, photo_id).as_json()
@@ -97,7 +158,8 @@ def create_app(settings: Settings | None = None, provider: CutoutProvider | None
     @app.get("/api/files/{prefix}/{name}")
     def serve_file(prefix: str, name: str, request: Request) -> Response:
         relative = f"{prefix}/{name}"
-        if not storage.is_relative_path(relative) or not library.is_served(db, relative):
+        # Only files a photo or a saved thumbnail points to.
+        if not storage.is_relative_path(relative) or not thumbnails.is_served(db, relative):
             raise HTTPException(status_code=404)
         sha = name.split(".", 1)[0]
         etag = f'"{sha}"'
@@ -109,6 +171,76 @@ def create_app(settings: Settings | None = None, provider: CutoutProvider | None
         return FileResponse(
             settings.media_dir / relative, media_type=storage.MIME[ext], headers=headers
         )
+
+    # Saved thumbnails. JSON here describes something that changes, so it is
+    # never cached without asking; the pictures it points to carry their hash.
+    @app.get("/api/thumbnails")
+    def recent_thumbnails() -> JSONResponse:
+        return JSONResponse(
+            {"thumbnails": thumbnails.recent(db)}, headers={"Cache-Control": "no-cache"}
+        )
+
+    @app.get("/api/thumbnails/{thumbnail_id}")
+    def get_thumbnail(
+        thumbnail_id: str, request: Request, history: Annotated[int, Query(ge=0)] = 0
+    ) -> Response:
+        # The ETag is the hash of the answer itself, so it changes with anything
+        # in it (a new version, a new preview, a download) and nothing else.
+        body = json.dumps(thumbnails.get(db, thumbnail_id, history), ensure_ascii=False)
+        etag = f'"{hashlib.sha256(body.encode()).hexdigest()[:32]}"'
+        headers = {"ETag": etag, "Cache-Control": "no-cache"}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(body, media_type="application/json", headers=headers)
+
+    @app.put("/api/thumbnails/{thumbnail_id}")
+    def save_thumbnail(thumbnail_id: str, body: ThumbnailSave, response: Response) -> dict:
+        saved = thumbnails.save(
+            db, thumbnail_id, body.base_version, body.parent_version, body.document
+        )
+        response.status_code = 201 if saved.created else 200
+        return {"id": saved.id, "version": saved.version, "updated_at": saved.updated_at}
+
+    @app.post("/api/thumbnails/{thumbnail_id}/duplicate", status_code=201)
+    def duplicate_thumbnail(thumbnail_id: str) -> dict:
+        saved = thumbnails.duplicate(db, thumbnail_id)
+        return {"id": saved.id, "version": saved.version, "updated_at": saved.updated_at}
+
+    @app.delete("/api/thumbnails/{thumbnail_id}", status_code=204)
+    def delete_thumbnail(thumbnail_id: str) -> Response:
+        thumbnails.delete(db, thumbnail_id)
+        return Response(status_code=204)
+
+    @app.put("/api/thumbnails/{thumbnail_id}/{kind}")
+    def attach_picture(
+        thumbnail_id: str,
+        kind: Literal["preview", "export"],
+        version: Annotated[int, Query(ge=1)],
+        file: Annotated[UploadFile, File()],
+    ) -> dict:
+        return thumbnails.attach_picture(db, settings, thumbnail_id, kind, version, file.file)
+
+    # «Mejorar» (ADR 0010): the browser sends the scene it drew without the
+    # frame and logo, and the overlay with only them; the run happens in the
+    # background and is asked about until it is ready or failed.
+    @app.post("/api/thumbnails/{thumbnail_id}/improvements", status_code=202)
+    def start_improvement(
+        thumbnail_id: str,
+        version: Annotated[int, Query(ge=1)],
+        scene: Annotated[UploadFile, File()],
+        overlay: Annotated[UploadFile | None, File()] = None,
+    ) -> dict:
+        thumbnails.check_id(thumbnail_id)
+        thumbnails.head_version(db, thumbnail_id)  # 404 before reading the upload
+        return pipeline.start(thumbnail_id, version, scene.file, overlay.file if overlay else None)
+
+    @app.get("/api/improvements/{improvement_id}")
+    def get_improvement(improvement_id: str) -> JSONResponse:
+        return JSONResponse(improve.get(db, improvement_id), headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/improvements/{improvement_id}/use")
+    def use_improvement(improvement_id: str) -> dict:
+        return thumbnails.use_improvement(db, improvement_id)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     def api_not_found(rest: str) -> Response:

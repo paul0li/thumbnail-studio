@@ -1,10 +1,11 @@
 import io
+import random
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from studio.app import create_app
 from studio.config import Settings
@@ -63,3 +64,19 @@ def upload(client: TestClient, role: str, *files: tuple[str, bytes, str]):
         data={"role": role},
         files=[("files", f) for f in files],
     )
+
+
+def texture(size: tuple[int, int], seed: int) -> Image.Image:
+    """Something with features to register: random shapes in many colours."""
+    rng = random.Random(seed)
+    image = Image.new("RGB", size, (rng.randrange(256), rng.randrange(256), rng.randrange(256)))
+    draw = ImageDraw.Draw(image)
+    for _ in range(size[0] * size[1] // 600):
+        x, y = rng.randrange(size[0]), rng.randrange(size[1])
+        r = rng.randrange(3, 18)
+        colour = (rng.randrange(256), rng.randrange(256), rng.randrange(256))
+        if rng.random() < 0.5:
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=colour)
+        else:
+            draw.rectangle((x - r, y - r, x + r // 2, y + r // 3), fill=colour)
+    return image

@@ -77,22 +77,62 @@ U2NET_HOME=/path/to/models             # rembg downloads u2net here on first use
 With the default provider (`none`) the app says that cutting out is off
 instead of offering a button that does nothing.
 
+### Improving a thumbnail («Mejorar»)
+
+The routine ends with «Mejorar» (ADR 0010). It sends the scene, drawn without
+the frame and the logo, to an image engine, puts the original faces back onto
+what returns, checks that nobody was added and that the title's words are
+exactly what was typed, and only then pastes the frame and logo on top. If
+anything fails, the host reads why and keeps her own thumbnail.
+
+The improved picture then stays with the thumbnail (ADR 0011), whether or not
+she taps «Usar esta»: «Mis miniaturas» shows it, and opening the thumbnail
+shows it with «Descargar de nuevo».
+
+It needs two things on the machine that runs the server:
+
+- **An OpenAI API key** for the image engine, in `.env` as `OPENAI_API_KEY`
+  (see `.env.example` for the model, quality and size, and their cost).
+- **Claude Code**, installed and signed in with the owner's own plan (see
+  Anthropic's Claude Code documentation), on the `PATH` of
+  the server process or named with `STUDIO_CLAUDE_COMMAND`. It reads the
+  result back; without it every improvement fails, visibly.
+
+Face detection uses OpenCV's YuNet model, which is in the repository
+(`server/studio/models/`, MIT). Tests never call the engine or Claude Code.
+
 ### Data
 
-The library database and photos live in `STUDIO_DATA_DIR` (`./data` by
-default, gitignored). Files are stored by content hash; deleting a photo hides
-it from the library but keeps the file. The current thumbnail is kept as a
-draft in the browser; saving designs on the server comes later.
+The database, photos, saved thumbnails and every picture of each improvement
+live in `STUDIO_DATA_DIR` (`./data`
+by default, gitignored). Files are stored by content hash; deleting a photo or
+a thumbnail hides it but keeps its files and versions. Thumbnails are saved as
+the host works, with their undo history, and the browser keeps a copy until
+the server confirms each save (ADR 0009). The schema is created and upgraded
+by numbered migrations when the server starts.
+
+People in the library are either a `host` or a `guest`. Libraries from before
+that split had a single `person` role: on upgrade, a person whose photo is in
+the host slot of any saved thumbnail becomes a host and every other person a
+guest. A future import from the previous version's library must map its
+host (conductor) role to `host` and its guest role to `guest`.
 
 ## Layout of the code
 
-- `server/studio/`: the FastAPI backend (photo library, cutouts, serving the
-  built frontend). Tests in `server/tests/`.
+- `server/studio/`: the FastAPI backend (photo library, cutouts, saved
+  thumbnails, serving the built frontend). «Mejorar» is `improve.py` (the
+  run), `engine.py` (image engines), `faces.py` (finding and restoring faces)
+  and `readback.py` (the Claude Code check). Migrations in
+  `server/studio/migrations/`, tests in `server/tests/`.
+- `schema/`: the design document's JSON Schema, which the server validates
+  with, and the cases both validators are tested against.
 - `web/src/document/`: the design document (ADR 0007): types, validator, title
   layout and presets. Pure TypeScript, tested with vitest.
 - `web/src/canvas/`: the Konva scene built from the document, and the drawing
   of words and photos with their effects.
-- `web/src/ui/`: the panels (photos, title, layer), plain DOM.
+- `web/src/sync.ts`, `web/src/open.ts`: saving as the host works, and what
+  opening a thumbnail means given the server and the device's copy.
+- `web/src/ui/`: the steps, the library, «Mis miniaturas», plain DOM.
 
 ## Documentation
 

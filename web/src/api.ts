@@ -2,7 +2,10 @@
 
 import type { PhotoRef } from "./document/types";
 
-export type Role = "background" | "person" | "logo" | "frame";
+export type Role = "background" | "host" | "guest" | "logo" | "frame";
+export type PersonRole = "host" | "guest";
+
+export const isPersonRole = (role: Role): role is PersonRole => role === "host" || role === "guest";
 
 export interface Photo {
   id: string;
@@ -69,10 +72,187 @@ export async function deletePhoto(id: string): Promise<void> {
   if (!response.ok && response.status !== 404) await json(response);
 }
 
+/** Moves a person between host and guest (uploaded in the wrong step). */
+export async function setRole(id: string, role: PersonRole): Promise<Photo> {
+  return json<Photo>(
+    await fetch(`/api/photos/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ role }),
+    }),
+  );
+}
+
 export async function cutOut(id: string): Promise<Photo> {
   return json<Photo>(await fetch(`/api/photos/${encodeURIComponent(id)}/cutout`, { method: "POST" }));
 }
 
 export function photoRef(photo: Photo): PhotoRef {
   return { photoId: photo.id, src: photo.url, width: photo.width, height: photo.height };
+}
+
+// Saved thumbnails (ADR 0009).
+
+/** The server cannot be reached: no network, or the proxy in front of it
+ *  answering for a server that is down. Never shown as «algo salió mal». */
+export class Offline extends Error {}
+
+/** The thumbnail moved on since the version a save was based on. */
+export class Stale extends Error {
+  constructor(readonly version: number) {
+    super("stale");
+  }
+}
+
+export class Gone extends Error {}
+
+export interface ThumbnailSummary {
+  id: string;
+  version: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  preview_url: string | null;
+  /** The last download shows this exact version. */
+  downloaded: boolean;
+  export_url: string | null;
+  exported_at: string | null;
+  /** The download is an improvement she chose («Usar esta»), not her render. */
+  export_improved: boolean;
+  /** The improved picture of its latest «Mejorar» that ended well, used or not. */
+  improved: KeptImprovement | null;
+}
+
+/** An improved picture kept with its thumbnail. */
+export interface KeptImprovement {
+  id: string;
+  /** The version it was made from: older than the thumbnail's after an edit. */
+  version: number;
+  /** The stored PNG, with the frame: exactly what is downloaded again. */
+  url: string;
+  finished_at: string | null;
+  /** «Usar esta» was tapped for it. */
+  chosen: boolean;
+}
+
+export interface SavedVersion {
+  version: number;
+  document: unknown;
+}
+
+export interface ThumbnailState extends ThumbnailSummary {
+  document: unknown;
+  /** The undo path, oldest first, without the head. */
+  history: SavedVersion[];
+  /** The last «Mejorar» of this thumbnail, of any version. */
+  improvement: Improvement | null;
+}
+
+// «Mejorar» (ADR 0010).
+
+export type ImprovementStage = "engine" | "faces" | "checks" | "frame" | "done";
+
+export interface Improvement {
+  id: string;
+  thumbnail_id: string;
+  version: number;
+  status: "running" | "ready" | "failed";
+  stage: ImprovementStage;
+  failure: string | null;
+  /** Why it failed, in Spanish, for the host. */
+  reason: string | null;
+  final_url: string | null;
+  created_at: string;
+  finished_at: string | null;
+  chosen: boolean;
+}
+
+export interface SaveBody {
+  base_version: number;
+  parent_version: number | null;
+  document: unknown;
+}
+
+const UNREACHABLE = new Set([502, 503, 504]);
+
+async function call(input: string, init?: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(input, init);
+  } catch {
+    throw new Offline();
+  }
+  if (UNREACHABLE.has(response.status)) throw new Offline();
+  return response;
+}
+
+const id = (thumbnailId: string) => `/api/thumbnails/${encodeURIComponent(thumbnailId)}`;
+
+export async function listThumbnails(): Promise<ThumbnailSummary[]> {
+  return (await json<{ thumbnails: ThumbnailSummary[] }>(await call("/api/thumbnails", { cache: "no-cache" }))).thumbnails;
+}
+
+/** The thumbnail, or null if it does not exist (or was deleted). */
+export async function getThumbnail(thumbnailId: string, history = 60): Promise<ThumbnailState | null> {
+  const response = await call(`${id(thumbnailId)}?history=${history}`, { cache: "no-cache" });
+  if (response.status === 404) return null;
+  return json<ThumbnailState>(response);
+}
+
+export async function saveThumbnail(thumbnailId: string, body: SaveBody, options: { keepalive?: boolean } = {}): Promise<number> {
+  const response = await call(id(thumbnailId), {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    keepalive: options.keepalive,
+  });
+  if (response.status === 409) {
+    const conflict = (await response.json()) as { version: number };
+    throw new Stale(conflict.version);
+  }
+  if (response.status === 404) throw new Gone();
+  return (await json<{ version: number }>(response)).version;
+}
+
+export async function duplicateThumbnail(thumbnailId: string): Promise<string> {
+  return (await json<{ id: string }>(await call(`${id(thumbnailId)}/duplicate`, { method: "POST" }))).id;
+}
+
+export async function deleteThumbnail(thumbnailId: string): Promise<void> {
+  const response = await call(id(thumbnailId), { method: "DELETE" });
+  if (!response.ok && response.status !== 404) await json(response);
+}
+
+/** The browser's render of one version: a preview for the history, or the
+ *  PNG that was just downloaded. */
+export async function putPicture(thumbnailId: string, kind: "preview" | "export", version: number, blob: Blob): Promise<ThumbnailSummary> {
+  const form = new FormData();
+  form.append("file", blob, kind === "export" ? "miniatura.png" : "vista.jpg");
+  return json<ThumbnailSummary>(await call(`${id(thumbnailId)}/${kind}?version=${version}`, { method: "PUT", body: form }));
+}
+
+/** A new thumbnail's id, chosen here so that a thumbnail made offline is
+ *  created with the same id when the connection is back. */
+export function newThumbnailId(): string {
+  const random = new Uint8Array(6);
+  crypto.getRandomValues(random);
+  return Date.now().toString(16).padStart(12, "0") + Array.from(random, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Sends today's scene (without frame or logo) and the overlay (only them)
+ *  for `version`, and returns the run, which goes on in the background. */
+export async function startImprovement(thumbnailId: string, version: number, scene: Blob, overlay: Blob | null): Promise<Improvement> {
+  const form = new FormData();
+  form.append("scene", scene, "escena.png");
+  if (overlay) form.append("overlay", overlay, "marco.png");
+  return json<Improvement>(await call(`${id(thumbnailId)}/improvements?version=${version}`, { method: "POST", body: form }));
+}
+
+export async function getImprovement(improvementId: string): Promise<Improvement> {
+  return json<Improvement>(await call(`/api/improvements/${encodeURIComponent(improvementId)}`, { cache: "no-store" }));
+}
+
+/** «Usar esta»: the improvement becomes the thumbnail's download. */
+export async function useImprovement(improvementId: string): Promise<ThumbnailSummary> {
+  return json<ThumbnailSummary>(await call(`/api/improvements/${encodeURIComponent(improvementId)}/use`, { method: "POST" }));
 }

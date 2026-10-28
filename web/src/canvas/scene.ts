@@ -353,10 +353,19 @@ export class Scene {
 
   /** The thumbnail at exactly 1280x720, from this same scene, without handles. */
   async exportCanvas(): Promise<HTMLCanvasElement> {
-    const doc = this.doc;
-    if (!doc) throw new Error("no document");
+    if (!this.doc) throw new Error("no document");
+    return this.exportDocument(this.doc);
+  }
+
+  /** Any document drawn by this same scene at 1280x720, then the scene goes
+   *  back to its own. Layers it lacks are transparent (an overlay of just
+   *  the frame and logo has nothing under them). */
+  async exportDocument(doc: DesignDocument): Promise<HTMLCanvasElement> {
     const srcs = doc.layers.flatMap((l) => (l.kind !== "title" && l.photo ? [l.photo.src] : []));
     await loadImages(srcs);
+    // Read after the wait: the document may have changed meanwhile.
+    const own = this.doc;
+    this.doc = doc;
     this.render();
     this.ui.visible(false);
     try {
@@ -368,6 +377,8 @@ export class Scene {
       out.getContext("2d")!.drawImage(rendered, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       return out;
     } finally {
+      this.doc = own;
+      this.render();
       this.ui.visible(true);
       this.ui.batchDraw();
     }

@@ -11,7 +11,7 @@ def test_the_app_says_when_cutting_out_is_off(client):
 
 
 def test_asking_for_a_cutout_when_it_is_off_says_so_instead_of_doing_nothing(client):
-    photo = upload(client, "person", ("p.jpg", jpeg(), "image/jpeg")).json()["photos"][0]
+    photo = upload(client, "host", ("p.jpg", jpeg(), "image/jpeg")).json()["photos"][0]
     response = client.post(f"/api/photos/{photo['id']}/cutout")
     assert response.status_code == 409
     assert response.json()["detail"] == "El recorte automático no está activo en este equipo."
@@ -28,7 +28,7 @@ def fake_removal(image: Image.Image) -> Image.Image:
 def test_a_cutout_replaces_what_the_canvas_draws_and_is_trimmed(make_client):
     client = make_client(RembgCutout(remove=fake_removal))
     assert client.get("/api/config").json()["cutout"]["available"] is True
-    photo = upload(client, "person", ("p.jpg", jpeg(), "image/jpeg")).json()["photos"][0]
+    photo = upload(client, "host", ("p.jpg", jpeg(), "image/jpeg")).json()["photos"][0]
     assert photo["cut_out"] is False
 
     response = client.post(f"/api/photos/{photo['id']}/cutout")
