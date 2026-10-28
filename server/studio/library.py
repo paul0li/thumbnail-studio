@@ -72,7 +72,7 @@ class Photo:
         }
 
 
-def _now() -> str:
+def now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
@@ -171,7 +171,7 @@ def upload(db: Database, settings: Settings, role: str, stream: BinaryIO) -> Pho
                 display_path,
                 display_w,
                 display_h,
-                _now(),
+                now(),
             ),
         )
     return get(db, photo_id)
@@ -209,7 +209,7 @@ def delete(db: Database, photo_id: str) -> None:
     with db.transaction() as conn:
         cursor = conn.execute(
             "UPDATE photos SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-            (_now(), photo_id),
+            (now(), photo_id),
         )
     if cursor.rowcount == 0:
         raise NotFound("Esa foto no existe.")
