@@ -1,0 +1,47 @@
+[project]
+name = "thumbnail-studio"
+version = "0.1.0"
+description = "Thumbnail Studio backend: photo library and cutouts for a browser-drawn thumbnail editor"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "pillow>=11.0",
+    "python-multipart>=0.0.20",
+]
+
+# Cutting people out is optional: rembg pulls in a few hundred MB of libraries
+# and its model is downloaded separately. The default provider is `none`, which
+# is what every test runs with.
+[project.optional-dependencies]
+cutout = ["rembg[cpu]>=2.0.81"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "httpx>=0.28",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["server/tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["server/studio"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff.lint.isort]
+known-first-party = ["studio"]
