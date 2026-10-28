@@ -101,7 +101,9 @@ function routeId(): string | null {
   return match ? match[1]! : null;
 }
 
-const routeScreen = (): Screen => (window.location.hash === "#/miniaturas" ? "history" : "editor");
+// The home page is the list: opening the app with no thumbnail in the address
+// shows the latest ones and «Hacer una nueva», not yesterday's editor.
+const routeScreen = (): Screen => (routeId() === null ? "history" : "editor");
 
 function pngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
@@ -162,7 +164,8 @@ async function main(): Promise<void> {
   const saver = new Saver(store);
   const library: LibraryState = { photos: [], config: null, busy: null };
   let view: View = STEPS[0]!.id;
-  let screen: Screen = routeScreen();
+  const startScreen: Screen = routeScreen();
+  let screen: Screen = startScreen;
   let recent: ThumbnailSummary[] | null = null;
   let recentError: string | null = null;
   /** «Mejorar» for the thumbnail on screen, if it was asked for. */
@@ -748,12 +751,11 @@ async function main(): Promise<void> {
 
   function renderTop(): void {
     const inHistory = screen === "history";
-    historyButton.replaceChildren(
-      inHistory
-        ? h("span", {}, h("span", { "aria-hidden": "true" }, "← "), "Volver a la miniatura")
-        : h("span", {}, "Mis miniaturas"),
-    );
-    historyButton.onclick = inHistory ? backToEditor : () => void showHistory();
+    // On the home page the list itself opens a thumbnail; the button is only
+    // the way home from the editor.
+    historyButton.hidden = inHistory;
+    historyButton.replaceChildren(h("span", {}, h("span", { "aria-hidden": "true" }, "← "), "Inicio"));
+    historyButton.onclick = () => void showHistory();
     progress.hidden = inHistory;
     stageWrap.hidden = inHistory;
     nav.hidden = inHistory;
@@ -972,7 +974,10 @@ async function main(): Promise<void> {
     begin(legacy ?? startOfDay(null, library.photos));
     if (legacy) forgetLegacyDraft();
   }
-  if (screen === "history") void showHistory();
+  if (startScreen === "history") {
+    window.history.replaceState(null, "", "#/miniaturas");
+    void showHistory();
+  }
 
   // The seam for a headless render (ADR 0005): load a document and export it
   // from this same scene.
