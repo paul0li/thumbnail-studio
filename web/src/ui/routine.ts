@@ -1,5 +1,5 @@
 // A new thumbnail starts the way every day does: the show's frame and logo
-// on, and the host already in place. Only what changes daily is left to choose.
+// on, and the host already in place (yesterday's, or the newest host photo). Only what changes daily is left to choose.
 
 import { photoRef, type Photo } from "../api";
 import { newDocument, people, setFrame, setHost, setLogo } from "../document/edit";
@@ -8,7 +8,7 @@ import type { DesignDocument } from "../document/types";
 function pickPhoto(photos: readonly Photo[], role: Photo["role"], lastId: string | undefined): Photo | undefined {
   const ofRole = photos.filter((p) => p.role === role);
   // The one used last time, if it is still in the library; otherwise the newest.
-  return ofRole.find((p) => p.id === lastId) ?? (role === "person" ? undefined : ofRole[0]);
+  return ofRole.find((p) => p.id === lastId) ?? ofRole[0];
 }
 
 /** A fresh document carrying over the frame, logo and host of `previous`
@@ -24,7 +24,7 @@ export function startOfDay(previous: DesignDocument | null, photos: readonly Pho
   const logo = pickPhoto(photos, "logo", last("logo"));
   if (logo) doc = setLogo(doc, photoRef(logo));
   const host = previous ? people(previous, "host")[0] : undefined;
-  const hostPhoto = host ? pickPhoto(photos, "person", host.photo.photoId) : undefined;
+  const hostPhoto = pickPhoto(photos, "host", host?.photo.photoId);
   if (hostPhoto) doc = setHost(doc, photoRef(hostPhoto));
   return doc;
 }

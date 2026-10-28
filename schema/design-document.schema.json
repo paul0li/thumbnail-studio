@@ -1,0 +1,919 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thumbnail-studio.invalid/design-document.schema.json",
+  "title": "Thumbnail Studio design document",
+  "$comment": "The shape of a design document (ADR 0007), shared by the server and the frontend. Rules a JSON Schema cannot say (the frame is the last layer, layer ids are unique, the title's words are exactly the typed text) are checked in code on both sides, against the same cases in schema/cases/. Unknown properties are ignored on both sides.",
+  "type": "object",
+  "required": [
+    "version",
+    "width",
+    "height",
+    "layers"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "width": {
+      "const": 1280
+    },
+    "height": {
+      "const": 720
+    },
+    "layers": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$comment": "In draft 2020-12 `items` skips what `prefixItems` covers, so the first layer is checked as a layer here too.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/layer"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "background"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            }
+          ]
+        }
+      ],
+      "items": {
+        "$ref": "#/$defs/layer"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "background"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "title"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "logo"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "frame"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+    "photo": {
+      "type": "object",
+      "required": [
+        "photoId",
+        "src",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "photoId": {
+          "type": "string"
+        },
+        "src": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "word": {
+      "type": "object",
+      "required": [
+        "text",
+        "size",
+        "fill",
+        "box",
+        "breakBefore"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\t\\n\\u000b\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]+$"
+        },
+        "size": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "fill": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "solid",
+                "gradient"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "solid"
+                  }
+                }
+              },
+              "then": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "color"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "solid"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/color"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "type": {
+                    "const": "gradient"
+                  }
+                }
+              },
+              "then": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "from",
+                  "to",
+                  "angle"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "gradient"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/color"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/color"
+                  },
+                  "angle": {
+                    "type": "number",
+                    "minimum": -360,
+                    "maximum": 360
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "box": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "color"
+              ],
+              "properties": {
+                "color": {
+                  "$ref": "#/$defs/color"
+                }
+              }
+            }
+          ]
+        },
+        "breakBefore": {
+          "type": "boolean"
+        }
+      }
+    },
+    "dropShadow": {
+      "type": "object",
+      "required": [
+        "type",
+        "color",
+        "opacity",
+        "x",
+        "y",
+        "blur",
+        "spread"
+      ],
+      "properties": {
+        "type": {
+          "const": "dropShadow"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "x": {
+          "type": "number",
+          "minimum": -200,
+          "maximum": 200
+        },
+        "y": {
+          "type": "number",
+          "minimum": -200,
+          "maximum": 200
+        },
+        "blur": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "spread": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "glow": {
+      "type": "object",
+      "required": [
+        "type",
+        "color",
+        "opacity",
+        "blur"
+      ],
+      "properties": {
+        "type": {
+          "const": "glow"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "blur": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 200
+        }
+      }
+    },
+    "outline": {
+      "type": "object",
+      "required": [
+        "type",
+        "color",
+        "width"
+      ],
+      "properties": {
+        "type": {
+          "const": "outline"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "halo": {
+      "type": "object",
+      "required": [
+        "type",
+        "color",
+        "opacity",
+        "size"
+      ],
+      "properties": {
+        "type": {
+          "const": "halo"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 3
+        }
+      }
+    },
+    "rimLight": {
+      "type": "object",
+      "required": [
+        "type",
+        "color",
+        "opacity",
+        "width",
+        "angle"
+      ],
+      "properties": {
+        "type": {
+          "const": "rimLight"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "angle": {
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        }
+      }
+    },
+    "titleEffects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "dropShadow",
+              "glow",
+              "outline"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "dropShadow"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/dropShadow"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "glow"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/glow"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "outline"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/outline"
+            }
+          }
+        ]
+      }
+    },
+    "logoEffects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "dropShadow",
+              "glow",
+              "outline"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "dropShadow"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/dropShadow"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "glow"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/glow"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "outline"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/outline"
+            }
+          }
+        ]
+      }
+    },
+    "personEffects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "dropShadow",
+              "glow",
+              "outline",
+              "halo",
+              "rimLight"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "dropShadow"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/dropShadow"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "glow"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/glow"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "outline"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/outline"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "halo"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/halo"
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "rimLight"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/rimLight"
+            }
+          }
+        ]
+      }
+    },
+    "layer": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "background",
+            "person",
+            "logo",
+            "frame",
+            "title"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "background"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/backgroundLayer"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "person"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/personLayer"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "logo"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/logoLayer"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "frame"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/frameLayer"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "title"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/titleLayer"
+          }
+        }
+      ]
+    },
+    "backgroundLayer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "photo",
+        "tone",
+        "flipX"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "background"
+        },
+        "photo": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/photo"
+            }
+          ]
+        },
+        "tone": {
+          "enum": [
+            "dark",
+            "light"
+          ]
+        },
+        "flipX": {
+          "type": "boolean"
+        }
+      }
+    },
+    "personLayer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "slot",
+        "photo",
+        "x",
+        "y",
+        "scale",
+        "flipX",
+        "effects"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "person"
+        },
+        "slot": {
+          "enum": [
+            "host",
+            "guest"
+          ]
+        },
+        "photo": {
+          "$ref": "#/$defs/photo"
+        },
+        "x": {
+          "type": "number",
+          "minimum": -1280,
+          "maximum": 2560
+        },
+        "y": {
+          "type": "number",
+          "minimum": -720,
+          "maximum": 1440
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "flipX": {
+          "type": "boolean"
+        },
+        "effects": {
+          "$ref": "#/$defs/personEffects"
+        }
+      }
+    },
+    "logoLayer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "photo",
+        "x",
+        "y",
+        "scale",
+        "effects"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "logo"
+        },
+        "photo": {
+          "$ref": "#/$defs/photo"
+        },
+        "x": {
+          "type": "number",
+          "minimum": -1280,
+          "maximum": 2560
+        },
+        "y": {
+          "type": "number",
+          "minimum": -720,
+          "maximum": 1440
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "effects": {
+          "$ref": "#/$defs/logoEffects"
+        }
+      }
+    },
+    "frameLayer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "photo"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "frame"
+        },
+        "photo": {
+          "$ref": "#/$defs/photo"
+        }
+      }
+    },
+    "titleLayer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "text",
+        "words",
+        "autoBreaks",
+        "align",
+        "x",
+        "y",
+        "scale",
+        "effects",
+        "accent",
+        "preset"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "title"
+        },
+        "text": {
+          "type": "string"
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/word"
+          }
+        },
+        "autoBreaks": {
+          "type": "boolean"
+        },
+        "align": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "x": {
+          "type": "number",
+          "minimum": -1280,
+          "maximum": 2560
+        },
+        "y": {
+          "type": "number",
+          "minimum": -720,
+          "maximum": 1440
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "effects": {
+          "$ref": "#/$defs/titleEffects"
+        },
+        "accent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/color"
+            }
+          ]
+        },
+        "preset": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "whitespace": {
+      "$comment": "The characters JavaScript's \\s matches; a title is split on runs of these. Kept here so both sides read the same list.",
+      "const": "[\\t\\n\\u000b\\f\\r \\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]"
+    }
+  }
+}

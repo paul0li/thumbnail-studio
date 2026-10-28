@@ -1,7 +1,7 @@
 // The photo library as the steps use it: a grid to pick from, a button to add
 // a new photo, and a sheet with the rarer actions (cut out, delete).
 
-import { ApiError, cutOut, deletePhoto, uploadPhotos, type Config, type Photo, type Role } from "../api";
+import { ApiError, cutOut, deletePhoto, isPersonRole, setRole, uploadPhotos, type Config, type Photo, type Role } from "../api";
 import { announce, h, toast } from "./dom";
 
 export interface LibraryState {
@@ -73,7 +73,7 @@ export function uploadButton(
   refresh: () => Promise<void>,
   onUploaded?: (photos: Photo[]) => void,
 ): HTMLElement {
-  const input = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", multiple: role === "person", hidden: true });
+  const input = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", multiple: role === "guest", hidden: true });
   input.addEventListener("change", async () => {
     const files = Array.from(input.files ?? []);
     input.value = "";
@@ -113,7 +113,7 @@ export function uploadButton(
         "aria-disabled": String(Boolean(state.busy)),
         on: { click: () => (state.busy ? announce(state.busy) : input.click()) },
       },
-      state.busy ?? (role === "person" ? "Subir fotos nuevas" : "Subir una foto nueva"),
+      state.busy ?? (role === "guest" ? "Subir fotos nuevas" : "Subir una foto nueva"),
     ),
     input,
   );
@@ -140,7 +140,7 @@ function openPhotoSheet(
     document.querySelector<HTMLElement>(`.tile-more[data-photo="${photo.id}"]`)?.focus();
   });
   const actions: HTMLElement[] = [];
-  if (photo.role === "person") {
+  if (isPersonRole(photo.role)) {
     if (!cutoutReady) {
       actions.push(h("p", { class: "note" }, "Quitar el fondo no está disponible en este equipo. Sube una foto que ya venga recortada."));
     } else if (photo.cut_out) {
@@ -165,6 +165,32 @@ function openPhotoSheet(
       });
       actions.push(button);
     }
+  }
+  if (isPersonRole(photo.role)) {
+    const to = photo.role === "host" ? "guest" : "host";
+    actions.push(
+      h(
+        "button",
+        {
+          type: "button",
+          class: "button",
+          on: {
+            click: async () => {
+              try {
+                await setRole(photo.id, to);
+                toast(to === "host" ? "Ahora está con los conductores." : "Ahora está con los invitados.");
+                close();
+              } catch (error) {
+                say(error instanceof ApiError ? `No se pudo mover: ${error.message}` : "No se pudo mover. Vuelve a intentarlo.");
+                return;
+              }
+              await refresh();
+            },
+          },
+        },
+        to === "host" ? "Mover a conductores" : "Mover a invitados",
+      ),
+    );
   }
   actions.push(
     h(

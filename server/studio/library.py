@@ -20,8 +20,11 @@ from studio.config import Settings
 from studio.cutout import CutoutProvider, CutoutUnavailable
 from studio.db import Database
 
-ROLES = ("background", "person", "logo", "frame")
-CUTOUT_ROLES = ("person",)
+ROLES = ("background", "host", "guest", "logo", "frame")
+# People: the only photos that are cut out, and the only ones that can move
+# between roles (a photo uploaded in the wrong step).
+PEOPLE_ROLES = ("host", "guest")
+CUTOUT_ROLES = PEOPLE_ROLES
 
 
 class LibraryError(Exception):
@@ -69,7 +72,7 @@ class Photo:
         }
 
 
-def _now() -> str:
+def now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
@@ -168,7 +171,7 @@ def upload(db: Database, settings: Settings, role: str, stream: BinaryIO) -> Pho
                 display_path,
                 display_w,
                 display_h,
-                _now(),
+                now(),
             ),
         )
     return get(db, photo_id)
@@ -206,10 +209,23 @@ def delete(db: Database, photo_id: str) -> None:
     with db.transaction() as conn:
         cursor = conn.execute(
             "UPDATE photos SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-            (_now(), photo_id),
+            (now(), photo_id),
         )
     if cursor.rowcount == 0:
         raise NotFound("Esa foto no existe.")
+
+
+def set_role(db: Database, photo_id: str, role: str) -> Photo:
+    """Moves a person between host and guest. Nothing else changes role: a
+    background is not a logo, and the display file was made for its role."""
+    photo = get(db, photo_id)
+    if photo.role not in PEOPLE_ROLES or role not in PEOPLE_ROLES:
+        raise LibraryError("Solo una persona puede pasar de conductor a invitado o al revés.")
+    with db.transaction() as conn:
+        conn.execute(
+            "UPDATE photos SET role = ? WHERE id = ? AND deleted_at IS NULL", (role, photo_id)
+        )
+    return get(db, photo_id)
 
 
 def cut_out(db: Database, settings: Settings, provider: CutoutProvider, photo_id: str) -> Photo:

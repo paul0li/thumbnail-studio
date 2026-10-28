@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "pillow>=11.0",
     "python-multipart>=0.0.20",
+    "jsonschema>=4.23",
 ]
 
 # Cutting people out is optional: rembg pulls in a few hundred MB of libraries
