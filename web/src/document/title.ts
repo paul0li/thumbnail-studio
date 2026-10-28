@@ -3,9 +3,9 @@
 import { autoBreaks, type Metrics } from "./layout";
 import { BRAND, type TitleLayer, type Word } from "./types";
 
-export const DEFAULT_WORD_SIZE = 120;
+export const DEFAULT_WORD_SIZE = 80;
 /** How wide an automatically wrapped line may get, in title pixels. */
-export const AUTO_WRAP_WIDTH = 720;
+export const AUTO_WRAP_WIDTH = 940;
 export const MIN_WORD_SIZE = 40;
 export const MAX_WORD_SIZE = 320;
 

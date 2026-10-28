@@ -4,7 +4,7 @@
 
 import Konva from "konva";
 import { clampScale, placeLayer } from "../document/edit";
-import { layoutTitle, type Metrics, type TitleLayout } from "../document/layout";
+import { accentRule, layoutTitle, type Metrics, type TitleLayout } from "../document/layout";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -66,8 +66,10 @@ export class Scene {
       flipEnabled: false,
       keepRatio: true,
       enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
-      anchorSize: 26,
-      anchorCornerRadius: 13,
+      anchorSize: 28,
+      anchorCornerRadius: 14,
+      // The handle you see is 28 px; the one a finger hits is 52 px.
+      anchorStyleFunc: (anchor) => anchor.hitStrokeWidth(24),
       anchorStroke: "#ffffff",
       anchorFill: "#111214",
       borderStroke: "#ffffff",
@@ -88,7 +90,6 @@ export class Scene {
     const scale = width / CANVAS_WIDTH;
     this.stage.size({ width, height: (CANVAS_HEIGHT * width) / CANVAS_WIDTH });
     this.stage.scale({ x: scale, y: scale });
-    this.transformer.anchorSize(Math.max(18, Math.min(30, 26 / Math.max(scale * 2.5, 1))));
     this.stage.batchDraw();
   }
 
@@ -267,6 +268,10 @@ export class Scene {
         shape.on("click tap", () => this.select({ layerId: layer.id, word: word.index }));
         group.add(shape);
       }
+    }
+    if (layer.accent && layout.lines.length) {
+      const rule = accentRule(layout, layer.align);
+      group.add(new Konva.Rect({ ...rule, fill: layer.accent }));
     }
     group.on("mousedown touchstart", () => {
       if (this.selection?.layerId !== layer.id) this.select({ layerId: layer.id, word: null });

@@ -11,18 +11,35 @@ export interface Preset {
   effects: () => Effect[];
   fill: () => Fill;
   box: () => WordBox | null;
+  /** The bar of colour under the title. */
+  accent: () => string | null;
 }
 
 const white = (): Fill => ({ type: "solid", color: BRAND.white });
 const noBox = (): WordBox | null => null;
+const noAccent = (): string | null => null;
 
 export const PRESETS: readonly Preset[] = [
+  {
+    // The show's look: white letters, a dark edge that holds them on any
+    // photo, and the red bar under them. New thumbnails start with it.
+    id: "brand",
+    label: "Marca",
+    effects: () => [
+      { type: "dropShadow", color: BRAND.black, opacity: 0.75, x: 0, y: 6, blur: 14, spread: 0 },
+      { type: "outline", color: BRAND.black, width: 7 },
+    ],
+    fill: white,
+    box: noBox,
+    accent: () => BRAND.red,
+  },
   {
     id: "outline",
     label: "Contorno",
     effects: () => [{ type: "outline", color: BRAND.black, width: 10 }],
     fill: white,
     box: noBox,
+    accent: noAccent,
   },
   {
     id: "shadow",
@@ -33,6 +50,7 @@ export const PRESETS: readonly Preset[] = [
     ],
     fill: white,
     box: noBox,
+    accent: noAccent,
   },
   {
     id: "neon",
@@ -44,6 +62,7 @@ export const PRESETS: readonly Preset[] = [
     ],
     fill: white,
     box: noBox,
+    accent: noAccent,
   },
   {
     id: "red-box",
@@ -53,6 +72,7 @@ export const PRESETS: readonly Preset[] = [
     ],
     fill: white,
     box: () => ({ color: BRAND.red }),
+    accent: noAccent,
   },
   {
     id: "echo",
@@ -64,6 +84,7 @@ export const PRESETS: readonly Preset[] = [
     ],
     fill: white,
     box: noBox,
+    accent: noAccent,
   },
   {
     id: "fire",
@@ -74,6 +95,7 @@ export const PRESETS: readonly Preset[] = [
     ],
     fill: () => ({ type: "gradient", from: BRAND.yellow, to: BRAND.red, angle: 90 }),
     box: noBox,
+    accent: noAccent,
   },
 ];
 
@@ -90,6 +112,13 @@ export function applyPreset(title: TitleLayer, id: string): TitleLayer {
     ...title,
     preset: preset.id,
     effects: preset.effects(),
+    accent: preset.accent(),
     words: title.words.map((w) => ({ ...w, fill: preset.fill(), box: preset.box() })),
   };
+}
+
+/** What a new title starts with: the brand preset. */
+export function brandStyle(): Pick<TitleLayer, "effects" | "accent" | "preset"> {
+  const brand = PRESETS[0]!;
+  return { effects: brand.effects(), accent: brand.accent(), preset: brand.id };
 }

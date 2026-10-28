@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoBreaks, BOX_PAD_X, layoutTitle, lines, WORD_SPACE } from "./layout";
+import { accentRule, autoBreaks, BOX_PAD_X, layoutTitle, lines, WORD_SPACE } from "./layout";
 import { mono } from "./testing";
 import { defaultWord } from "./title";
 import type { Word } from "./types";
@@ -79,5 +79,16 @@ describe("autoBreaks", () => {
     const ws = autoBreaks(words("ABCDEFGHIJ KL"), 300, mono);
     expect(ws.map((w) => w.text)).toEqual(["ABCDEFGHIJ", "KL"]);
     expect(ws[1]!.breakBefore).toBe(true);
+  });
+});
+
+describe("accent bar", () => {
+  it("sits under the last line and follows the alignment", () => {
+    const layout = layoutTitle(words("NADIE LO VIO"), "left", mono);
+    const left = accentRule(layout, "left");
+    expect(left.x).toBe(0);
+    expect(left.y).toBeGreaterThan(layout.height);
+    const right = accentRule(layout, "right");
+    expect(right.x + right.width).toBeCloseTo(layout.width);
   });
 });

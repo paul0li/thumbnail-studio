@@ -24,6 +24,19 @@ describe("validateDocument", () => {
     expect(errors(doc)).toEqual([]);
   });
 
+  it("a person says where the routine put them, and the accent is a colour or nothing", () => {
+    const doc = clone(addPerson(newDocument(), photo, "host"));
+    expect(errors(doc)).toEqual([]);
+    const person = doc.layers[1] as unknown as Record<string, unknown>;
+    person.slot = "audience";
+    expect(errors(doc).some((e) => e.includes("slot"))).toBe(true);
+    const plain = clone(newDocument());
+    (plain.layers[1] as unknown as Record<string, unknown>).accent = "red";
+    expect(errors(plain).some((e) => e.includes("accent"))).toBe(true);
+    (plain.layers[1] as unknown as Record<string, unknown>).accent = null;
+    expect(errors(plain)).toEqual([]);
+  });
+
   it("survives a round trip through JSON", () => {
     const doc = addPerson(newDocument("HOLA MUNDO"), photo);
     expect(errors(clone(doc))).toEqual([]);

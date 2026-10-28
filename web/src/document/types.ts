@@ -105,9 +105,14 @@ export interface BackgroundLayer {
 
 /** `x`, `y` are the centre of the photo on the canvas; `scale` multiplies the
  *  photo's own pixel size. */
+/** Where the daily routine puts a person: the host on the right, guests
+ *  centre-left. It decides where a new photo lands, nothing else. */
+export type PersonSlot = "host" | "guest";
+
 export interface PersonLayer {
   id: string;
   kind: "person";
+  slot: PersonSlot;
   photo: PhotoRef;
   x: number;
   y: number;
@@ -165,6 +170,8 @@ export interface TitleLayer {
   y: number;
   scale: number;
   effects: Effect[];
+  /** A short bar of colour under the title, the show's accent. */
+  accent: Color | null;
   /** The preset the effects started from, if any. */
   preset: string | null;
 }

@@ -32,9 +32,9 @@ describe("retitle", () => {
 
   it("rewraps lines while breaks are automatic, and leaves them once set by hand", () => {
     const t = title(newDocument("A"))!;
-    const auto = retitle(t, "AAAA BBBB CCCC DDDD EEEE", mono);
+    const auto = retitle(t, "AAAA BBBB CCCC DDDD EEEE FFFF GGGG", mono);
     expect(auto.words.some((w) => w.breakBefore)).toBe(true);
-    const manual = retitle({ ...t, autoBreaks: false }, "AAAA BBBB CCCC DDDD EEEE", mono);
+    const manual = retitle({ ...t, autoBreaks: false }, "AAAA BBBB CCCC DDDD EEEE FFFF GGGG", mono);
     expect(manual.words.some((w) => w.breakBefore)).toBe(false);
   });
 });

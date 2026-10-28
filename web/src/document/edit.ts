@@ -1,6 +1,7 @@
 // Edits to the design document. Each takes a document and returns a new one;
 // gestures and panels only ever change the thumbnail through these.
 
+import { brandStyle } from "./presets";
 import { defaultWord, splitWords } from "./title";
 import {
   CANVAS_HEIGHT,
@@ -11,15 +12,21 @@ import {
   type Effect,
   type Layer,
   type MovableLayer,
+  type PersonLayer,
   type PhotoRef,
   type TitleLayer,
 } from "./types";
 
 export const MIN_SCALE_PX = 60;
 export const MAX_SCALE_PX = 2400;
-/** A new person is placed this tall; a new logo this wide. */
-export const PERSON_HEIGHT = 560;
+/** A new host is placed this tall, a new guest this tall, a new logo this
+ *  wide: the proportions of the show's usual thumbnail. */
+export const HOST_HEIGHT = 600;
+export const GUEST_HEIGHT = 440;
 export const LOGO_WIDTH = 220;
+/** Guests start at the left edge and stand side by side, overlapping a little. */
+const GUEST_LEFT = 20;
+const GUEST_OVERLAP = 40;
 
 let counter = 0;
 export function newId(prefix: string): string {
@@ -27,7 +34,11 @@ export function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${counter.toString(36)}`;
 }
 
-export function newDocument(title = "ESCRIBE EL TÍTULO"): DesignDocument {
+/** The title a new thumbnail starts with, shown on the canvas until the host
+ *  types theirs. */
+export const SAMPLE_TITLE = "ESCRIBE EL TÍTULO";
+
+export function newDocument(title = SAMPLE_TITLE): DesignDocument {
   const titleLayer: TitleLayer = {
     id: newId("title"),
     kind: "title",
@@ -35,11 +46,11 @@ export function newDocument(title = "ESCRIBE EL TÍTULO"): DesignDocument {
     words: splitWords(title).map(defaultWord),
     autoBreaks: true,
     align: "left",
-    x: 60,
-    y: 380,
+    // Top left, where the show's title always goes.
+    x: 50,
+    y: 50,
     scale: 1,
-    effects: [{ type: "outline", color: "#000000", width: 10 }],
-    preset: "outline",
+    ...brandStyle(),
   };
   return {
     version: DOCUMENT_VERSION,
@@ -98,20 +109,61 @@ export function setBackgroundTone(doc: DesignDocument, tone: BackgroundLayer["to
   return replaceLayer(doc, background(doc).id, (l) => ({ ...(l as BackgroundLayer), tone }));
 }
 
-export function addPerson(doc: DesignDocument, photo: PhotoRef): DesignDocument {
-  const people = doc.layers.filter((l) => l.kind === "person").length;
-  const scale = PERSON_HEIGHT / photo.height;
-  const x = [880, 400, 1080, 640][people % 4]!;
-  return insertBelowTitle(doc, {
+export function people(doc: DesignDocument, slot?: PersonLayer["slot"]): PersonLayer[] {
+  return doc.layers.filter((l): l is PersonLayer => l.kind === "person" && (!slot || l.slot === slot));
+}
+
+/** Adds a person where the routine puts them: the host flush with the right
+ *  edge, each guest to the right of the guests already there. */
+export function addPerson(doc: DesignDocument, photo: PhotoRef, slot: PersonLayer["slot"] = "guest"): DesignDocument {
+  const height = slot === "host" ? HOST_HEIGHT : GUEST_HEIGHT;
+  const scale = height / photo.height;
+  const width = photo.width * scale;
+  let x: number;
+  if (slot === "host") {
+    x = Math.max(CANVAS_WIDTH / 2, CANVAS_WIDTH - width / 2);
+  } else {
+    const right = Math.max(
+      GUEST_LEFT,
+      ...people(doc, "guest").map((g) => g.x + (g.photo.width * g.scale) / 2 - GUEST_OVERLAP),
+    );
+    x = Math.min(CANVAS_WIDTH, right + width / 2);
+  }
+  const layer: PersonLayer = {
     id: newId("person"),
     kind: "person",
+    slot,
     photo,
     x,
-    y: CANVAS_HEIGHT - (photo.height * scale) / 2,
+    y: CANVAS_HEIGHT - height / 2,
     scale,
     flipX: false,
     effects: [],
-  });
+  };
+  // The host stands behind the guests, as in the show's thumbnails.
+  const firstGuest = doc.layers.findIndex((l) => l.kind === "person" && l.slot === "guest");
+  if (slot === "host" && firstGuest > 0) {
+    const layers = [...doc.layers];
+    layers.splice(firstGuest, 0, layer);
+    return { ...doc, layers };
+  }
+  return insertBelowTitle(doc, layer);
+}
+
+/** The host is one person: choosing another replaces them, in their place. */
+export function setHost(doc: DesignDocument, photo: PhotoRef | null): DesignDocument {
+  const current = people(doc, "host")[0];
+  const without = { ...doc, layers: doc.layers.filter((l) => l !== current) };
+  if (!photo) return without;
+  if (current && current.photo.photoId === photo.photoId) return doc;
+  return addPerson(without, photo, "host");
+}
+
+/** Puts a guest in, or takes them out if that photo is already a guest. */
+export function toggleGuest(doc: DesignDocument, photo: PhotoRef): DesignDocument {
+  const existing = people(doc, "guest").find((g) => g.photo.photoId === photo.photoId);
+  if (existing) return { ...doc, layers: doc.layers.filter((l) => l !== existing) };
+  return addPerson(doc, photo, "guest");
 }
 
 export function setLogo(doc: DesignDocument, photo: PhotoRef | null): DesignDocument {
@@ -230,4 +282,28 @@ export function replacePhoto(doc: DesignDocument, photo: PhotoRef): DesignDocume
       return { ...l, photo };
     }),
   };
+}
+
+/** One tap of «Más grande» / «Más chica». */
+export const SCALE_STEP = 1.1;
+
+/** The title's block at scale 1, from its layout. The title is placed by its
+ *  top-left corner, so buttons need its size to keep its centre in place. */
+export interface BlockSize {
+  width: number;
+  height: number;
+}
+
+/** Grows (`+1`) or shrinks (`-1`) a layer one step around its centre: the
+ *  button alternative to pinching. */
+export function scaleLayerStep(doc: DesignDocument, id: string, step: 1 | -1, block?: BlockSize): DesignDocument {
+  const layer = findLayer(doc, id);
+  if (!layer || (layer.kind !== "person" && layer.kind !== "logo" && layer.kind !== "title")) return doc;
+  const scale = clampScale(layer, step > 0 ? layer.scale * SCALE_STEP : layer.scale / SCALE_STEP);
+  if (Math.abs(scale - layer.scale) < 1e-9) return doc;
+  if (layer.kind !== "title") return placeLayer(doc, id, layer.x, layer.y, scale);
+  const b = block ?? { width: 0, height: 0 };
+  const cx = layer.x + (b.width * layer.scale) / 2;
+  const cy = layer.y + (b.height * layer.scale) / 2;
+  return placeLayer(doc, id, cx - (b.width * scale) / 2, cy - (b.height * scale) / 2, scale);
 }

@@ -145,3 +145,20 @@ export function autoBreaks(words: readonly Word[], maxWidth: number, metrics: Me
     return { ...word, breakBefore: false };
   });
 }
+
+/** The accent bar's size, in title pixels: short and thick enough to survive
+ *  a thumbnail seen 320 px wide. */
+export const ACCENT_WIDTH = 200;
+export const ACCENT_HEIGHT = 14;
+/** Gap between the bottom of the last line and the bar, as a fraction of the
+ *  last line's largest size. */
+export const ACCENT_GAP = 0.12;
+
+/** Where the accent bar goes under a laid-out title, following its alignment. */
+export function accentRule(layout: TitleLayout, align: Align): Rect {
+  const last = layout.lines[layout.lines.length - 1];
+  const size = Math.max(0, ...(last?.words.map((w) => w.size) ?? [0]));
+  const width = Math.min(ACCENT_WIDTH, Math.max(layout.width, ACCENT_WIDTH));
+  const x = align === "left" ? 0 : align === "center" ? (layout.width - width) / 2 : layout.width - width;
+  return { x, y: layout.height + ACCENT_GAP * size, width, height: ACCENT_HEIGHT };
+}

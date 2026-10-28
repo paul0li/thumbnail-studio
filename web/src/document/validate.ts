@@ -128,6 +128,7 @@ class Checker {
     this.placement(o, path);
     this.effects(o.effects, "title", `${path}.effects`);
     if (o.preset !== null && typeof o.preset !== "string") this.fail(`${path}.preset`, "must be a string or null");
+    if (o.accent !== null) this.color(o, "accent", path);
     const words = o.words;
     if (!Array.isArray(words)) {
       this.fail(`${path}.words`, "must be a list");
@@ -194,6 +195,7 @@ export function validateDocument(input: unknown): ValidationResult {
         c.boolean(layer, "flipX", path);
         break;
       case "person":
+        c.oneOf(layer, "slot", path, ["host", "guest"]);
         c.photo(layer.photo, `${path}.photo`);
         c.placement(layer, path);
         c.boolean(layer, "flipX", path);
