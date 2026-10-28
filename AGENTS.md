@@ -102,6 +102,18 @@ was verified (the command run, or what was looked at, and at what size).
 - No numbered product rules and no criterion ids. Tests are named after the
   behaviour they check, and change when the wanted behaviour changes.
 
+### Code
+
+- Backend: Python with uv, `ruff` for lint and format, `pytest` for tests.
+  Endpoints that touch Pillow are plain `def`; no image work inside a database
+  transaction.
+- Frontend: TypeScript in strict mode, `tsc --noEmit` clean, `vitest` for
+  anything that does not need a canvas.
+- The design document is the source of truth: the canvas is built from it and
+  gestures write back to it through `web/src/document/edit.ts`. Any change to
+  its shape updates `types.ts` and `validate.ts` together.
+- `make test` and `make lint` must pass before committing.
+
 ### Slices
 
 Each piece of work ends in something the user can see or use, not in a

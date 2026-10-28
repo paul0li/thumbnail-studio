@@ -33,6 +33,67 @@ can reach it, with no accounts or passwords. A Claude Code session on the
 owner's own Claude plan orchestrates the improvement, and image editing runs
 on a separate machine in the same tailnet.
 
+## Running it locally
+
+You need [uv](https://docs.astral.sh/uv/) and Node.js 22 or later.
+
+```bash
+cp .env.example .env   # optional: every setting has a default
+make install           # Python deps (uv) and frontend deps (npm), all project-local
+make serve             # builds the frontend and serves the app at http://127.0.0.1:8000
+```
+
+While working on it, `make dev` runs the backend with reload and Vite with hot
+reload on http://127.0.0.1:5173, forwarding `/api` to the backend so the
+browser sees one origin, as in production. Use `make dev API_PORT=8100
+WEB_PORT=5174` if those ports are taken.
+
+```bash
+make test   # pytest for the backend, vitest for the design document
+make lint   # ruff, and tsc --noEmit for the frontend
+```
+
+### Reaching it from a phone
+
+The server binds to `127.0.0.1` on purpose. To open it from a phone, put a
+proxy in front of it on the same machine, for example `tailscale serve`, which
+gives the devices in your tailnet an HTTPS address such as
+`https://your-machine.example.ts.net` without exposing the app to the local
+network. HTTPS also matters for the share sheet that saves the PNG on iOS.
+
+### Cutting people out (optional)
+
+Photos of people are best uploaded already cut out (PNG with transparency).
+To cut them out on the server, install the optional extra and point rembg at
+its model:
+
+```bash
+make install-cutout                    # uv sync --extra cutout
+# in .env:
+STUDIO_CUTOUT_PROVIDER=rembg
+U2NET_HOME=/path/to/models             # rembg downloads u2net here on first use
+```
+
+With the default provider (`none`) the app says that cutting out is off
+instead of offering a button that does nothing.
+
+### Data
+
+The library database and photos live in `STUDIO_DATA_DIR` (`./data` by
+default, gitignored). Files are stored by content hash; deleting a photo hides
+it from the library but keeps the file. The current thumbnail is kept as a
+draft in the browser; saving designs on the server comes later.
+
+## Layout of the code
+
+- `server/studio/`: the FastAPI backend (photo library, cutouts, serving the
+  built frontend). Tests in `server/tests/`.
+- `web/src/document/`: the design document (ADR 0007): types, validator, title
+  layout and presets. Pure TypeScript, tested with vitest.
+- `web/src/canvas/`: the Konva scene built from the document, and the drawing
+  of words and photos with their effects.
+- `web/src/ui/`: the panels (photos, title, layer), plain DOM.
+
 ## Documentation
 
 - [`AGENTS.md`](AGENTS.md): how to work in this repository.
