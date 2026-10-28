@@ -85,6 +85,10 @@ what returns, checks that nobody was added and that the title's words are
 exactly what was typed, and only then pastes the frame and logo on top. If
 anything fails, the host reads why and keeps her own thumbnail.
 
+The improved picture then stays with the thumbnail (ADR 0011), whether or not
+she taps «Usar esta»: «Mis miniaturas» shows it, and opening the thumbnail
+shows it with «Descargar de nuevo».
+
 It needs two things on the machine that runs the server:
 
 - **An OpenAI API key** for the image engine, in `.env` as `OPENAI_API_KEY`

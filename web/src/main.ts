@@ -15,6 +15,7 @@ import {
   startImprovement,
   useImprovement,
   type Improvement,
+  type KeptImprovement,
   type ThumbnailState,
   type ThumbnailSummary,
 } from "./api";
@@ -29,6 +30,7 @@ import { Store } from "./store";
 import { readLocal, Saver, type SyncStatus } from "./sync";
 import { describeDocument, layerName } from "./ui/describe";
 import { advanced, announce, clear, h, keepFocus, toast } from "./ui/dom";
+import { doneWords, keptFrom, reopenView, type Downloaded } from "./ui/done";
 import { historyPanel } from "./ui/history";
 import { improvePanel, type ImproveState } from "./ui/improve";
 import type { LibraryState } from "./ui/library";
@@ -173,8 +175,11 @@ async function main(): Promise<void> {
   /** The improved picture, loaded as soon as it is ready, so that «Usar esta»
    *  can open the share sheet at once (it must follow the tap directly). */
   let improvedBlob: { url: string; blob: Blob } | null = null;
-  /** The download is an improvement she chose, for this version. */
-  let chosen: { version: number; url: string } | null = null;
+  /** The thumbnail's improved picture, kept whether or not she used it. */
+  let kept: KeptImprovement | null = null;
+  /** What she downloaded since this thumbnail opened: the done screen
+   *  speaks of that one. */
+  let downloaded: Downloaded = null;
   let pollTimer: number | undefined;
 
   // The canvas is a picture: it is named, and described in words that follow
@@ -324,25 +329,34 @@ async function main(): Promise<void> {
     }
   });
 
-  /** «Descargar otra vez» on the done screen: the improvement if she chose
-   *  it for this version, otherwise her own render. */
-  async function downloadAgain(): Promise<void> {
-    if (chosen && chosen.version === store.version && saver.settled()) {
-      try {
-        const blob = improvedBlob?.url === chosen.url ? improvedBlob.blob : await fetchBlob(chosen.url);
-        await download(blob);
-      } catch {
-        toast("No se pudo descargar la imagen mejorada. Revisa la conexión.", { error: true });
-      }
+  /** «Descargar de nuevo»: the stored PNG of the improved picture, byte for
+   *  byte. For the version on screen it also becomes the download, as
+   *  «Usar esta» would make it. */
+  async function downloadImproved(): Promise<void> {
+    const picture = kept;
+    if (!picture) return;
+    let blob: Blob;
+    try {
+      blob = improvedBlob?.url === picture.url ? improvedBlob.blob : await fetchBlob(picture.url);
+    } catch {
+      toast("No se pudo descargar la imagen mejorada. Revisa la conexión.", { error: true });
       return;
     }
-    await finish();
+    if (!(await download(blob))) return;
+    downloaded = "improved";
+    if (!picture.chosen && picture.version === store.version && saver.settled() && !store.dirty()) {
+      void useImprovement(picture.id)
+        .then(() => {
+          if (kept?.id === picture.id) kept = { ...kept, chosen: true };
+        })
+        .catch(() => undefined);
+    }
+    if (view === "done") render();
   }
 
   // --- «Mejorar» (ADR 0010) -------------------------------------------------
 
-  function keepBlob(improvement: Improvement): void {
-    const url = improvement.final_url;
+  function keepBlob(url: string | null): void {
     if (!url || improvedBlob?.url === url) return;
     void fetchBlob(url)
       .then((blob) => (improvedBlob = { url, blob }))
@@ -359,7 +373,9 @@ async function main(): Promise<void> {
       pollTimer = window.setTimeout(() => void poll(improvement.id), POLL_MS);
     } else if (improvement.status === "ready") {
       improving = { kind: "ready", improvement };
-      keepBlob(improvement);
+      // It stays with the thumbnail from now on, whatever she taps.
+      kept = keptFrom(improvement) ?? kept;
+      keepBlob(improvement.final_url);
       if (before) announce("Lista la miniatura mejorada.");
     } else {
       improving = { kind: "failed", reason: improvement.reason ?? "Algo salió mal en el servidor." };
@@ -451,13 +467,14 @@ async function main(): Promise<void> {
     const blob = improvedBlob?.url === improvement.final_url ? improvedBlob.blob : null;
     if (!blob) {
       toast("La imagen mejorada todavía se está cargando. Prueba en un momento.");
-      keepBlob(improvement);
+      keepBlob(improvement.final_url);
       return;
     }
     if (!(await download(blob))) return;
+    downloaded = "improved";
     try {
       await useImprovement(improvement.id);
-      chosen = { version: improvement.version, url: improvement.final_url! };
+      if (kept?.id === improvement.id) kept = { ...kept, chosen: true };
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Se descargó, pero no se pudo guardar en «Mis miniaturas».", { error: true });
     }
@@ -475,7 +492,7 @@ async function main(): Promise<void> {
       const blob = await exportBlob(scene);
       if (await download(blob)) {
         pendingExport = { id: store.id, doc, blob };
-        chosen = null;
+        downloaded = "mine";
         go("done");
         await saver.flush();
         await sendExport();
@@ -511,7 +528,8 @@ async function main(): Promise<void> {
     window.clearTimeout(previewTimer);
     window.clearTimeout(pollTimer);
     improving = null;
-    chosen = null;
+    kept = null;
+    downloaded = null;
     store.open(start.opened);
     saver.reset(start.status);
     view = firstView;
@@ -530,7 +548,9 @@ async function main(): Promise<void> {
     return STEPS[0]!.id;
   }
 
-  async function openById(id: string, mode: "push" | "replace" = "replace"): Promise<boolean> {
+  /** `fromList`: she tapped it in «Mis miniaturas», so an improved picture
+   *  opens on the done screen. A reload opens where she left it. */
+  async function openById(id: string, mode: "push" | "replace" = "replace", fromList = false): Promise<boolean> {
     let server: ThumbnailState | null | "offline";
     try {
       server = await getThumbnail(id);
@@ -544,9 +564,10 @@ async function main(): Promise<void> {
     let first = viewFor(state, id);
     // A run of the version that opened is shown; any other is history.
     const improvement = state?.improvement && state.improvement.version === start.opened.current.version ? state.improvement : null;
+    if (fromList) first = reopenView({ kept: Boolean(state?.improved), run: improvement?.status ?? null, left: loadView(id) }) ?? first;
     if (first === "improve" && !improvement) first = STEPS[STEPS.length - 1]!.id;
     show(start, first, mode);
-    if (state?.export_improved && state.downloaded && state.export_url) chosen = { version: state.version, url: state.export_url };
+    kept = state?.improved ?? null;
     if (improvement) track(improvement);
     historyMissing = server === "offline";
     return true;
@@ -569,11 +590,16 @@ async function main(): Promise<void> {
 
   async function openFromHistory(id: string): Promise<void> {
     if (id === store.id) {
+      // A new visit: the done screen no longer speaks of the last download.
+      downloaded = null;
       backToEditor();
+      const run = improving ? (improving.kind === "sending" ? "running" : improving.kind) : null;
+      const to = reopenView({ kept: kept !== null, run, left: view });
+      if (to && to !== view) go(to);
       return;
     }
     if (!(await readyToLeave())) return;
-    if (await openById(id, "push")) {
+    if (await openById(id, "push", true)) {
       panel.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
       window.scrollTo({ top: 0 });
     } else toast("No se pudo abrir esa miniatura. Revisa la conexión.", { error: true });
@@ -790,6 +816,9 @@ async function main(): Promise<void> {
 
   function renderBar(): void {
     undo.setAttribute("aria-disabled", String(!store.canUndo()));
+    // On the done screen with the improved picture, «Descargar de nuevo» is
+    // the one primary button.
+    next.classList.toggle("primary", !(view === "done" && words().improved));
     // While improving, the thumbnail on top is the one that was sent: it is
     // not edited from here, and «Editar» goes back to the title.
     undo.hidden = view === "improve";
@@ -849,29 +878,56 @@ async function main(): Promise<void> {
         return;
       }
       if (view === "done") {
-        const improved = chosen !== null && chosen.version === store.version;
-        if (improved && chosen && improvedBlob?.url !== chosen.url) {
-          const url = chosen.url;
-          void fetchBlob(url)
-            .then((blob) => (improvedBlob = { url, blob }))
-            .catch(() => undefined);
-        }
+        const said = words();
+        const picture = said.improved ? kept : null;
+        // Loaded now, so the share sheet can open right on the tap.
+        if (picture) keepBlob(picture.url);
         panel.replaceChildren(
           h(
             "div",
             { class: "panel-body" },
             h("h1", { tabindex: "-1" }, "✓ Miniatura lista"),
+            picture
+              ? h("img", {
+                  class: "improved",
+                  src: picture.url,
+                  alt: "La miniatura mejorada por la IA, con el marco del programa.",
+                  width: "1280",
+                  height: "720",
+                })
+              : null,
+            said.stale
+              ? h(
+                  "p",
+                  { class: "note" },
+                  h("strong", {}, `${said.stale}. `),
+                  "Arriba está como la dejaste. Para mejorar lo nuevo, toca «Editar» y luego «Mejorar».",
+                )
+              : null,
+            h("p", {}, said.text),
             h(
-              "p",
-              {},
-              improved
-                ? "Quedó la mejorada en tu teléfono y en «Mis miniaturas». Para mañana, toca «Hacer una nueva»: el marco y el conductor ya van puestos."
-                : "Quedó en tu teléfono y en «Mis miniaturas». Para mañana, toca «Hacer una nueva»: el marco y el conductor ya van puestos.",
+              "div",
+              { class: "row" },
+              h(
+                "button",
+                {
+                  type: "button",
+                  class: picture ? "button primary" : "button",
+                  on: { click: () => void (picture ? downloadImproved() : finish()) },
+                },
+                said.primary,
+              ),
             ),
-            h("div", { class: "row" }, h("button", { type: "button", class: "button", on: { click: () => void downloadAgain() } }, "Descargar otra vez")),
             advanced(
               "thumbnail",
               h("h2", {}, "Esta miniatura"),
+              picture
+                ? h(
+                    "div",
+                    { class: "row" },
+                    h("button", { type: "button", class: "button", on: { click: () => void finish() } }, "Descargar la mía, sin mejorar"),
+                  )
+                : null,
               h("p", { class: "muted" }, "Una copia empieza igual que esta; lo que cambies en la copia no toca a esta."),
               h("div", { class: "row" }, h("button", { type: "button", class: "button", on: { click: () => void duplicate() } }, "Hacer otra como esta")),
               h(
@@ -908,6 +964,10 @@ async function main(): Promise<void> {
       );
     });
     panel.scrollTop = scroll;
+  }
+
+  function words() {
+    return doneWords({ kept, version: store.version, downloaded });
   }
 
   function render(): void {

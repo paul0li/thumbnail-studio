@@ -20,6 +20,7 @@ function server(version: number): ThumbnailState {
     export_url: null,
     exported_at: null,
     export_improved: false,
+    improved: null,
     improvement: null,
     document: b,
     history: [{ version: version - 1, document: a }],

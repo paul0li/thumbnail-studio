@@ -34,6 +34,7 @@ More in [`README.md`](README.md).
   - [0008 — The daily thumbnail is a guided routine; fine editing is tucked away](docs/adr/0008-guided-daily-routine.md)
   - [0009 — Thumbnails are saved as versions on the server, with undo as a path](docs/adr/0009-saved-thumbnails.md)
   - [0010 — «Mejorar» sends the scene, restores faces by registration, checks, and pastes the frame last](docs/adr/0010-improvement-pipeline.md)
+  - [0011 — The improved picture stays with its thumbnail](docs/adr/0011-improved-picture-stays.md)
 - `CLAUDE.local.md` / `AGENTS.local.md` (gitignored, may not exist): facts about
   one particular installation. Read them if present; never commit them.
 
