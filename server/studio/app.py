@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+from concurrent.futures import Executor
 from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
@@ -10,10 +11,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from studio import library, storage, thumbnails
+from studio import faces, improve, library, storage, thumbnails
 from studio.config import Settings
 from studio.cutout import CutoutProvider, build_provider
 from studio.db import Database
+from studio.engine import ImageEngine, OpenAIImages
+from studio.readback import ClaudeCodeReader, TitleReader
 
 log = logging.getLogger("studio")
 
@@ -45,10 +48,48 @@ class WebFiles(StaticFiles):
         return response
 
 
-def create_app(settings: Settings | None = None, provider: CutoutProvider | None = None) -> FastAPI:
+def build_engine(settings: Settings) -> ImageEngine:
+    key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
+    return OpenAIImages(
+        api_key=key,
+        model=settings.openai_image_model,
+        quality=settings.openai_image_quality,
+        size=settings.openai_image_size,
+        timeout=settings.openai_timeout_seconds,
+    )
+
+
+def build_reader(settings: Settings) -> TitleReader:
+    return ClaudeCodeReader(
+        command=settings.claude_command,
+        model=settings.claude_model,
+        timeout=settings.claude_timeout_seconds,
+    )
+
+
+def create_app(
+    settings: Settings | None = None,
+    provider: CutoutProvider | None = None,
+    *,
+    engine: ImageEngine | None = None,
+    reader: TitleReader | None = None,
+    detector: faces.Detector | None = None,
+    executor: Executor | None = None,
+) -> FastAPI:
     settings = settings or Settings()
     db = Database(settings.db_path)
     cutout = provider or build_provider(settings.cutout_provider)
+    pipeline = improve.Pipeline(
+        db,
+        settings,
+        engine or build_engine(settings),
+        reader or build_reader(settings),
+        detector,
+    )
+    if executor is not None:
+        pipeline.executor = executor
+    # A run left `running` by a stopped server will never finish: say so.
+    improve.interrupted(db)
 
     app = FastAPI(title="Thumbnail Studio", docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.settings = settings
@@ -178,6 +219,28 @@ def create_app(settings: Settings | None = None, provider: CutoutProvider | None
         file: Annotated[UploadFile, File()],
     ) -> dict:
         return thumbnails.attach_picture(db, settings, thumbnail_id, kind, version, file.file)
+
+    # «Mejorar» (ADR 0010): the browser sends the scene it drew without the
+    # frame and logo, and the overlay with only them; the run happens in the
+    # background and is asked about until it is ready or failed.
+    @app.post("/api/thumbnails/{thumbnail_id}/improvements", status_code=202)
+    def start_improvement(
+        thumbnail_id: str,
+        version: Annotated[int, Query(ge=1)],
+        scene: Annotated[UploadFile, File()],
+        overlay: Annotated[UploadFile | None, File()] = None,
+    ) -> dict:
+        thumbnails.check_id(thumbnail_id)
+        thumbnails.head_version(db, thumbnail_id)  # 404 before reading the upload
+        return pipeline.start(thumbnail_id, version, scene.file, overlay.file if overlay else None)
+
+    @app.get("/api/improvements/{improvement_id}")
+    def get_improvement(improvement_id: str) -> JSONResponse:
+        return JSONResponse(improve.get(db, improvement_id), headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/improvements/{improvement_id}/use")
+    def use_improvement(improvement_id: str) -> dict:
+        return thumbnails.use_improvement(db, improvement_id)
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     def api_not_found(rest: str) -> Response:

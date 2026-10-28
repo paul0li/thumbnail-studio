@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, BinaryIO
 
-from studio import document, images, storage
+from studio import document, images, improve, storage
 from studio.config import Settings
 from studio.db import Database
 from studio.library import Conflict, LibraryError, NotFound, now
@@ -173,6 +173,8 @@ def _summary(row) -> dict:
         "downloaded": row["export_version"] == row["version"],
         "export_url": f"/api/files/{row['export_path']}" if row["export_path"] else None,
         "exported_at": row["exported_at"],
+        # The download is the improved picture («Usar esta»), not her render.
+        "export_improved": row["export_improvement"] is not None,
     }
 
 
@@ -184,6 +186,19 @@ def _row(conn, thumbnail_id: str):
     if row is None:
         raise NotFound("Esa miniatura no existe.")
     return row
+
+
+def document_at(db: Database, thumbnail_id: str, version: int) -> dict:
+    """The document as it was saved in `version`, if that version is still kept."""
+    with db.connection() as conn:
+        _row(conn, thumbnail_id)
+        found = conn.execute(
+            "SELECT document FROM thumbnail_versions WHERE thumbnail_id = ? AND version = ?",
+            (thumbnail_id, version),
+        ).fetchone()
+    if found is None:
+        raise LibraryError("Esa versión de la miniatura no existe.")
+    return json.loads(found["document"])
 
 
 def head_version(db: Database, thumbnail_id: str) -> int:
@@ -209,9 +224,11 @@ def get(db: Database, thumbnail_id: str, history: int = 0) -> dict:
                SELECT version, document FROM path ORDER BY depth DESC""",
             (thumbnail_id, row["version"], history),
         ).fetchall()
+        last_improvement = improve.latest(conn, thumbnail_id)
     head = path[-1]
     return {
         **_summary(row),
+        "improvement": last_improvement,
         "document": json.loads(head["document"]),
         "history": [
             {"version": r["version"], "document": json.loads(r["document"])} for r in path[:-1]
@@ -259,6 +276,9 @@ def _referenced(conn, relative: str) -> bool:
             """SELECT 1 FROM photos WHERE path = ?1 OR display_path = ?1
                UNION ALL
                SELECT 1 FROM thumbnails WHERE preview_path = ?1 OR export_path = ?1
+               UNION ALL
+               SELECT 1 FROM improvements WHERE scene_path = ?1 OR overlay_path = ?1
+                   OR raw_path = ?1 OR restored_path = ?1 OR final_path = ?1
                LIMIT 1""",
             (relative,),
         ).fetchone()
@@ -313,8 +333,8 @@ def attach_picture(
             raise LibraryError("Esa versión de la miniatura no existe.")
         if kind == "export":
             conn.execute(
-                """UPDATE thumbnails SET export_path = ?, export_version = ?, exported_at = ?
-                   WHERE id = ?""",
+                """UPDATE thumbnails SET export_path = ?, export_version = ?, exported_at = ?,
+                       export_improvement = NULL WHERE id = ?""",
                 (relative, version, now(), thumbnail_id),
             )
         elif version >= (row["preview_version"] or 0):
@@ -334,3 +354,29 @@ def attach_picture(
         (settings.media_dir / stale).unlink(missing_ok=True)
     with db.connection() as conn:
         return _summary(_row(conn, thumbnail_id))
+
+
+def use_improvement(db: Database, improvement_id: str) -> dict:
+    """«Usar esta»: the improvement's final picture becomes the thumbnail's
+    download and its picture in the history. Only for the version on screen:
+    after an edit, the improvement shows something that is no longer there."""
+    with db.transaction() as conn:
+        found = conn.execute(
+            "SELECT * FROM improvements WHERE id = ?", (improvement_id,)
+        ).fetchone()
+        if found is None:
+            raise NotFound("Esa mejora no existe.")
+        row = _row(conn, found["thumbnail_id"])
+        if found["status"] != "ready":
+            raise Conflict("Esa mejora no terminó bien.")
+        if found["version"] != row["version"]:
+            raise Conflict("La miniatura cambió después de mejorarla. Vuelve a mejorarla.")
+        stamp = now()
+        conn.execute(
+            """UPDATE thumbnails SET export_path = ?, export_version = ?, exported_at = ?,
+                   export_improvement = ? WHERE id = ?""",
+            (found["final_path"], found["version"], stamp, improvement_id, row["id"]),
+        )
+        conn.execute("UPDATE improvements SET chosen_at = ? WHERE id = ?", (stamp, improvement_id))
+    with db.connection() as conn:
+        return _summary(_row(conn, found["thumbnail_id"]))
