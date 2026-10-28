@@ -442,10 +442,12 @@ class Pipeline:
                 reading.notes,
             )
         if not _same_words(reading.title, title):
-            shown = reading.title.strip() or "nada"
+            shown = " ".join(reading.title.split())
             raise Failure(
                 "title_changed",
-                f"La IA cambió el título: en la imagen se lee «{shown}».",
+                f"La IA cambió el título: en la imagen se lee «{shown}»."
+                if shown
+                else "La IA quitó el título de la imagen.",
                 reading.notes,
             )
 

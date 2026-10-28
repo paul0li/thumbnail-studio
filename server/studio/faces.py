@@ -319,8 +319,9 @@ class Restored:
 
 def _restore_region(face: SceneFace) -> Box:
     """What gets pasted: the detector's box (brows to chin) grown to take in
-    the forehead, the hair line and a little of the jaw."""
-    return face.box.grow(0.18, 0.45, 0.18, 0.12)
+    the forehead, the hair line and the jaw, and hardly below the chin: what
+    is under it (a microphone, a hand) may have moved differently."""
+    return face.box.grow(0.18, 0.45, 0.18, 0.06)
 
 
 def _feature_region(face: SceneFace) -> Box:

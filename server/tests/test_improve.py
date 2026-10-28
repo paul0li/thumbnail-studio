@@ -379,3 +379,9 @@ def test_the_pictures_of_a_run_are_served(setup, settings):
     row = sqlite_row(settings, improvement["id"])
     for column in ("scene_path", "overlay_path", "raw_path", "restored_path", "final_path"):
         assert client.get(f"/api/files/{row[column]}").status_code == 200
+
+
+def test_a_title_that_disappeared_is_said_plainly(setup):
+    client, *_, scene = setup(reader=FakeReader(title=""))
+    improvement = failed(client, scene)
+    assert improvement["reason"] == "La IA quitó el título de la imagen."
