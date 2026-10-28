@@ -14,3 +14,7 @@ data/*
 # Site-specific notes and agent instructions: never committed
 CLAUDE.local.md
 AGENTS.local.md
+
+# Frontend
+web/node_modules/
+web/dist/
