@@ -92,7 +92,7 @@ function result(improvement: Improvement, actions: ImproveActions): HTMLElement 
       "div",
       { class: "row two" },
       h("button", { type: "button", class: "button primary", on: { click: actions.use } }, "Usar esta"),
-      h("button", { type: "button", class: "button", on: { click: actions.keepMine } }, "Quedarme con la mía"),
+      h("button", { type: "button", class: "button", on: { click: actions.keepMine } }, "Volver atrás"),
     ),
   );
 }

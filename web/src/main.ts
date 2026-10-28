@@ -836,7 +836,7 @@ async function main(): Promise<void> {
         panel.replaceChildren(
           improvePanel(improving ?? { kind: "failed", reason: "No hay ninguna mejora en curso." }, {
             use: () => void useImproved(),
-            keepMine: () => void finish(),
+            keepMine: () => go(STEPS[STEPS.length - 1]!.id),
             retry: () => {
               improving = null;
               void improveNow();

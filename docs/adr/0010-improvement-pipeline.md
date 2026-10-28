@@ -30,7 +30,7 @@ Choices that could have gone the other way:
 
 - **One «Mejorar» at the end of the routine**, after the title, as its one
   primary button. It shows one result, and two buttons: «Usar esta» and
-  «Quedarme con la mía».
+  «Volver atrás» (back to the title step, to keep editing).
 - **What goes to the engine is the scene**: the background, the people and
   the title in its plain style (every word alike, as a new thumbnail draws
   it), drawn by the browser from the same Konva scene (ADR 0005). The frame
