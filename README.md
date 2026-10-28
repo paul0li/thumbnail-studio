@@ -79,20 +79,27 @@ instead of offering a button that does nothing.
 
 ### Data
 
-The library database and photos live in `STUDIO_DATA_DIR` (`./data` by
-default, gitignored). Files are stored by content hash; deleting a photo hides
-it from the library but keeps the file. The current thumbnail is kept as a
-draft in the browser; saving designs on the server comes later.
+The database, photos and saved thumbnails live in `STUDIO_DATA_DIR` (`./data`
+by default, gitignored). Files are stored by content hash; deleting a photo or
+a thumbnail hides it but keeps its files and versions. Thumbnails are saved as
+the host works, with their undo history, and the browser keeps a copy until
+the server confirms each save (ADR 0009). The schema is created and upgraded
+by numbered migrations when the server starts.
 
 ## Layout of the code
 
-- `server/studio/`: the FastAPI backend (photo library, cutouts, serving the
-  built frontend). Tests in `server/tests/`.
+- `server/studio/`: the FastAPI backend (photo library, cutouts, saved
+  thumbnails, serving the built frontend). Migrations in
+  `server/studio/migrations/`, tests in `server/tests/`.
+- `schema/`: the design document's JSON Schema, which the server validates
+  with, and the cases both validators are tested against.
 - `web/src/document/`: the design document (ADR 0007): types, validator, title
   layout and presets. Pure TypeScript, tested with vitest.
 - `web/src/canvas/`: the Konva scene built from the document, and the drawing
   of words and photos with their effects.
-- `web/src/ui/`: the panels (photos, title, layer), plain DOM.
+- `web/src/sync.ts`, `web/src/open.ts`: saving as the host works, and what
+  opening a thumbnail means given the server and the device's copy.
+- `web/src/ui/`: the steps, the library, «Mis miniaturas», plain DOM.
 
 ## Documentation
 

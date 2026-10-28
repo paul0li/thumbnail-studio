@@ -32,6 +32,7 @@ More in [`README.md`](README.md).
   - [0006 — A Claude Code session orchestrates the improvement, with no fallback](docs/adr/0006-claude-code-orchestrates.md)
   - [0007 — A thumbnail is a layered design document with Figma-style effects](docs/adr/0007-design-document.md)
   - [0008 — The daily thumbnail is a guided routine; fine editing is tucked away](docs/adr/0008-guided-daily-routine.md)
+  - [0009 — Thumbnails are saved as versions on the server, with undo as a path](docs/adr/0009-saved-thumbnails.md)
 - `CLAUDE.local.md` / `AGENTS.local.md` (gitignored, may not exist): facts about
   one particular installation. Read them if present; never commit them.
 
@@ -112,7 +113,10 @@ was verified (the command run, or what was looked at, and at what size).
   anything that does not need a canvas.
 - The design document is the source of truth: the canvas is built from it and
   gestures write back to it through `web/src/document/edit.ts`. Any change to
-  its shape updates `types.ts` and `validate.ts` together.
+  its shape updates `types.ts`, `validate.ts` and the JSON Schema in
+  `schema/` together, with a case in `schema/cases/` for any new rule.
+- The database schema is the numbered migrations in `server/studio/migrations/`,
+  applied in order. Never edit one that has shipped; add the next number.
 - `make test` and `make lint` must pass before committing.
 
 ### Slices
