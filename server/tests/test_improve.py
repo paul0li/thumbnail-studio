@@ -385,3 +385,85 @@ def test_a_title_that_disappeared_is_said_plainly(setup):
     client, *_, scene = setup(reader=FakeReader(title=""))
     improvement = failed(client, scene)
     assert improvement["reason"] == "La IA quitó el título de la imagen."
+
+
+# --- The improved picture stays with the thumbnail ------------------------------
+
+
+def test_an_improved_picture_stays_with_the_thumbnail_without_using_it(setup):
+    client, *_, scene = setup()
+    assert client.get(f"/api/thumbnails/{ID}").json()["improved"] is None
+    ready = client.get(f"/api/improvements/{start(client, scene).json()['id']}").json()
+
+    state = client.get(f"/api/thumbnails/{ID}").json()
+    assert state["improved"] == {
+        "id": ready["id"],
+        "version": 1,
+        "url": ready["final_url"],
+        "finished_at": ready["finished_at"],
+        "chosen": False,
+    }
+    (listed,) = client.get("/api/thumbnails").json()["thumbnails"]
+    assert listed["improved"]["url"] == ready["final_url"]
+    # Nothing was downloaded: it is kept, not made the download.
+    assert listed["downloaded"] is False
+    assert listed["export_url"] is None
+
+
+def test_the_improved_picture_is_served_as_the_exact_bytes_stored(setup, settings):
+    client, *_, scene = setup()
+    improvement = start(client, scene).json()
+    url = client.get(f"/api/thumbnails/{ID}").json()["improved"]["url"]
+    row = sqlite_row(settings, improvement["id"])
+    served = client.get(url)
+    assert served.headers["content-type"] == "image/png"
+    assert served.content == (settings.media_dir / row["final_path"]).read_bytes()
+
+
+def test_downloading_her_own_keeps_the_improved_picture(setup):
+    client, *_, scene = setup()
+    improvement = start(client, scene).json()
+    client.post(f"/api/improvements/{improvement['id']}/use")
+    kept = client.get(f"/api/thumbnails/{ID}").json()["improved"]
+    before = client.get(kept["url"]).content
+
+    own = png_bytes(Image.new("RGB", (1280, 720), (10, 10, 10)))
+    client.put(
+        f"/api/thumbnails/{ID}/export?version=1", files={"file": ("m.png", own, "image/png")}
+    )
+    state = client.get(f"/api/thumbnails/{ID}").json()
+    assert state["export_improved"] is False
+    assert state["improved"] == kept
+    assert client.get(kept["url"]).content == before
+
+
+def test_editing_after_an_improvement_keeps_it_with_the_version_it_was_made_from(setup):
+    client, *_, scene = setup()
+    start(client, scene)
+    doc = client.get(f"/api/thumbnails/{ID}").json()["document"]
+    doc["layers"][1]["x"] = 800
+    put(client, doc, 1, parent=1, thumbnail_id=ID)
+    state = client.get(f"/api/thumbnails/{ID}").json()
+    assert state["version"] == 2
+    assert state["improved"]["version"] == 1
+
+
+def test_a_later_run_that_fails_does_not_take_the_improved_picture_away(setup):
+    client, engine, _, _, scene = setup()
+    first = start(client, scene).json()
+
+    def broken(_):
+        raise EngineError("network", "No se pudo conectar con el servicio de imágenes.")
+
+    engine.respond = broken
+    failed(client, scene)
+    state = client.get(f"/api/thumbnails/{ID}").json()
+    assert state["improvement"]["status"] == "failed"
+    assert state["improved"]["id"] == first["id"]
+
+
+def test_a_newer_improvement_replaces_the_one_shown(setup):
+    client, *_, scene = setup()
+    start(client, scene)
+    second = start(client, scene).json()
+    assert client.get(f"/api/thumbnails/{ID}").json()["improved"]["id"] == second["id"]

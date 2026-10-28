@@ -226,6 +226,27 @@ def latest(conn, thumbnail_id: str) -> dict | None:
     return as_json(row) if row else None
 
 
+def kept(conn, thumbnail_id: str) -> dict | None:
+    """The thumbnail's improved picture: the final picture of its latest run
+    that ended well, chosen with «Usar esta» or not. A later run that fails
+    does not take it away, and neither does downloading her own."""
+    row = conn.execute(
+        """SELECT * FROM improvements
+           WHERE thumbnail_id = ? AND status = 'ready' AND final_path IS NOT NULL
+           ORDER BY created_at DESC, id DESC LIMIT 1""",
+        (thumbnail_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "version": row["version"],
+        "url": f"/api/files/{row['final_path']}",
+        "finished_at": row["finished_at"],
+        "chosen": row["chosen_at"] is not None,
+    }
+
+
 def interrupted(db: Database) -> int:
     """Runs left `running` by a server that stopped. They will never finish."""
     with db.transaction() as conn:

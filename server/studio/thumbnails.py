@@ -1,5 +1,6 @@
 """Saved thumbnails: the design document with its versions, a preview for the
-history and the PNG of the last download (ADR 0009).
+history, the PNG of the last download (ADR 0009) and the improved picture, if
+«Mejorar» made one (ADR 0011).
 
 A save names the version it was based on. If the thumbnail has moved on since
 (another tab, another device), the save is refused with the current version,
@@ -156,7 +157,7 @@ def save(db: Database, thumbnail_id: str, base_version: int, parent: int | None,
     return Saved(thumbnail_id, version, stamp, created=False)
 
 
-def _summary(row) -> dict:
+def _summary(conn, row) -> dict:
     preview = row["preview_path"]
     preview_version = row["preview_version"] or 0
     # The download is the best picture of the thumbnail, unless it was edited
@@ -175,6 +176,9 @@ def _summary(row) -> dict:
         "exported_at": row["exported_at"],
         # The download is the improved picture («Usar esta»), not her render.
         "export_improved": row["export_improvement"] is not None,
+        # The improved picture stays with the thumbnail, used or not; the
+        # history shows it rather than her render (ADR 0011).
+        "improved": improve.kept(conn, row["id"]),
     }
 
 
@@ -225,9 +229,10 @@ def get(db: Database, thumbnail_id: str, history: int = 0) -> dict:
             (thumbnail_id, row["version"], history),
         ).fetchall()
         last_improvement = improve.latest(conn, thumbnail_id)
+        summary = _summary(conn, row)
     head = path[-1]
     return {
-        **_summary(row),
+        **summary,
         "improvement": last_improvement,
         "document": json.loads(head["document"]),
         "history": [
@@ -243,7 +248,7 @@ def recent(db: Database, limit: int = RECENT) -> list[dict]:
                ORDER BY updated_at DESC, id DESC LIMIT ?""",
             (limit,),
         ).fetchall()
-    return [_summary(r) for r in rows]
+        return [_summary(conn, r) for r in rows]
 
 
 def duplicate(db: Database, thumbnail_id: str) -> Saved:
@@ -353,7 +358,7 @@ def attach_picture(
     if stale:
         (settings.media_dir / stale).unlink(missing_ok=True)
     with db.connection() as conn:
-        return _summary(_row(conn, thumbnail_id))
+        return _summary(conn, _row(conn, thumbnail_id))
 
 
 def use_improvement(db: Database, improvement_id: str) -> dict:
@@ -379,4 +384,4 @@ def use_improvement(db: Database, improvement_id: str) -> dict:
         )
         conn.execute("UPDATE improvements SET chosen_at = ? WHERE id = ?", (stamp, improvement_id))
     with db.connection() as conn:
-        return _summary(_row(conn, found["thumbnail_id"]))
+        return _summary(conn, _row(conn, found["thumbnail_id"]))
