@@ -1,6 +1,6 @@
 # 0003 — The AI runs on a separate machine, with a manual fallback
 
-**Status:** Accepted · 2026-10-27
+**Status:** Superseded by 0006 · 2026-10-27
 
 ## Context
 

@@ -29,8 +29,9 @@ that does not look like the show is a wrong one.
 ## Where it runs
 
 On devices connected through a Tailscale tailnet: only devices in the tailnet
-can reach it, with no accounts or passwords. The AI runs on a separate machine
-in the same tailnet.
+can reach it, with no accounts or passwords. A Claude Code session on the
+owner's own Claude plan orchestrates the improvement, and image editing runs
+on a separate machine in the same tailnet.
 
 ## Documentation
 

@@ -12,9 +12,10 @@ what must not change: the faces of the host and guests, the logo and frame, and
 the words of the title. The result has to make a phone viewer want to click,
 and has to be recognisable at a glance as an episode of that show.
 
-It runs on devices connected through a Tailscale tailnet. The AI runs on a
-separate machine reachable over an API, with a manual ChatGPT/Gemini round
-trip as a fallback. It must stay free to run.
+It runs on devices connected through a Tailscale tailnet. A Claude Code
+session, on the installation owner's own Claude plan, orchestrates the
+improvement; image editing runs on a separate machine reachable over an API.
+If any of that fails, the improvement fails visibly: there is no fallback.
 
 More in [`README.md`](README.md).
 
@@ -25,8 +26,11 @@ More in [`README.md`](README.md).
   file. Read these before changing how something works.
   - [0001 — Start from scratch in a new repository](docs/adr/0001-start-from-scratch.md)
   - [0002 — The AI works by layers; protected layers are restored, not trusted](docs/adr/0002-layered-ai-with-protected-layers.md)
-  - [0003 — The AI runs on a separate machine, with a manual fallback](docs/adr/0003-where-the-ai-runs.md)
+  - [0003 — The AI runs on a separate machine, with a manual fallback](docs/adr/0003-where-the-ai-runs.md) (superseded by 0006)
   - [0004 — The host is the user](docs/adr/0004-the-host-is-the-user.md)
+  - [0005 — TypeScript draws, Python does the image work](docs/adr/0005-stack.md)
+  - [0006 — A Claude Code session orchestrates the improvement, with no fallback](docs/adr/0006-claude-code-orchestrates.md)
+  - [0007 — A thumbnail is a layered design document with Figma-style effects](docs/adr/0007-design-document.md)
 - `CLAUDE.local.md` / `AGENTS.local.md` (gitignored, may not exist): facts about
   one particular installation. Read them if present; never commit them.
 
