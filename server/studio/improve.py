@@ -57,7 +57,8 @@ People:
 - Where a body is cut off by the edge of a cutout, complete it naturally.
 - Unify the lighting on everyone so they belong in the same scene, with a
   strong rim light separating them from the background.
-- Add no people and no faces. Do not duplicate anyone.
+- Add no people and no faces, and do not remove anyone, even someone who is
+  only partly visible. Do not duplicate anyone.
 
 Background:
 - Keep the background's subject, but darken and simplify it behind the
@@ -65,9 +66,15 @@ Background:
   of them into a real person.
 
 Title:
-- Restyle the title so it stands out: you may change the sizes of its words,
-  their colours, add depth, outline or glow, and place it where it reads best
+- Restyle the title so it stands out, and place it where it reads best
   without covering faces.
+- Play with the sizes of its words: make the one or two words that carry the
+  story clearly bigger, and keep short words (articles, prepositions,
+  conjunctions) small.
+- Lettering style, strictly: flat letters in a heavy condensed sans serif,
+  with ONE solid colour fill per word (white, yellow or red), a clean solid
+  dark outline and a soft drop shadow. No texture, no grain, no gradient
+  inside the letters, no metallic, grunge, glow, bevel or 3D extrusion.
 - Keep its words exactly, letter by letter, in the same order, including
   accents and Ñ: "{title}".
 - Add no other text anywhere: no captions, no logos, no watermarks.
