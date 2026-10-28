@@ -39,6 +39,13 @@ export function displayTitle(summary: Pick<ThumbnailSummary, "title">): string {
   return !title || title === SAMPLE_TITLE ? "Sin título todavía" : title;
 }
 
+/** The picture on a thumbnail's card: the improved one if «Mejorar» made one,
+ *  even if she downloaded her own after; otherwise her latest render. */
+export function cardPicture(summary: Pick<ThumbnailSummary, "preview_url" | "improved">): { src: string | null; improved: boolean } {
+  if (summary.improved) return { src: summary.improved.url, improved: true };
+  return { src: summary.preview_url, improved: false };
+}
+
 export interface HistoryOptions {
   thumbnails: ThumbnailSummary[] | null;
   /** The one open in the editor. */
@@ -70,6 +77,7 @@ export function historyPanel(o: HistoryOptions): HTMLElement {
             ...o.thumbnails.map((t) => {
               const current = t.id === o.currentId;
               const title = displayTitle(t);
+              const picture = cardPicture(t);
               return h(
                 "li",
                 {},
@@ -81,8 +89,8 @@ export function historyPanel(o: HistoryOptions): HTMLElement {
                     "aria-current": current ? "true" : false,
                     on: { click: () => o.open(t.id) },
                   },
-                  t.preview_url
-                    ? h("img", { src: t.preview_url, alt: "", loading: "lazy", decoding: "async", width: "640", height: "360" })
+                  picture.src
+                    ? h("img", { src: picture.src, alt: "", loading: "lazy", decoding: "async", width: "640", height: "360" })
                     : h("span", { class: "history-blank", "aria-hidden": "true" }, "Sin vista previa"),
                   h(
                     "span",
@@ -93,6 +101,7 @@ export function historyPanel(o: HistoryOptions): HTMLElement {
                       "span",
                       { class: "history-tags" },
                       current ? h("span", { class: "tag" }, "Abierta ahora") : null,
+                      picture.improved ? h("span", { class: "tag improved" }, h("span", { "aria-hidden": "true" }, "✨ "), "Mejorada") : null,
                       t.downloaded ? h("span", { class: "tag" }, "✓ Descargada") : null,
                     ),
                   ),

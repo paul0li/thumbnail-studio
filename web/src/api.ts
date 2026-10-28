@@ -119,6 +119,20 @@ export interface ThumbnailSummary {
   exported_at: string | null;
   /** The download is an improvement she chose («Usar esta»), not her render. */
   export_improved: boolean;
+  /** The improved picture of its latest «Mejorar» that ended well, used or not. */
+  improved: KeptImprovement | null;
+}
+
+/** An improved picture kept with its thumbnail. */
+export interface KeptImprovement {
+  id: string;
+  /** The version it was made from: older than the thumbnail's after an edit. */
+  version: number;
+  /** The stored PNG, with the frame: exactly what is downloaded again. */
+  url: string;
+  finished_at: string | null;
+  /** «Usar esta» was tapped for it. */
+  chosen: boolean;
 }
 
 export interface SavedVersion {

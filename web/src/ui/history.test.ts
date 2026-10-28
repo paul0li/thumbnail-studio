@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayTitle, when } from "./history";
+import { cardPicture, displayTitle, when } from "./history";
 
 describe("the history in words", () => {
   const now = new Date(2026, 9, 27, 12, 0);
@@ -14,5 +14,18 @@ describe("the history in words", () => {
     expect(displayTitle({ title: "ESCRIBE EL TÍTULO" })).toBe("Sin título todavía");
     expect(displayTitle({ title: "" })).toBe("Sin título todavía");
     expect(displayTitle({ title: "NADIE LO VIO" })).toBe("NADIE LO VIO");
+  });
+});
+
+describe("the picture on a card", () => {
+  const improved = { id: "imp1", version: 3, url: "/api/files/ab/improved.png", finished_at: null, chosen: false };
+
+  it("shows the improved picture when there is one, even over a newer render of her own", () => {
+    expect(cardPicture({ preview_url: "/api/files/cd/mine.png", improved })).toEqual({ src: improved.url, improved: true });
+  });
+
+  it("shows her own render when nothing was improved", () => {
+    expect(cardPicture({ preview_url: "/api/files/cd/mine.png", improved: null })).toEqual({ src: "/api/files/cd/mine.png", improved: false });
+    expect(cardPicture({ preview_url: null, improved: null })).toEqual({ src: null, improved: false });
   });
 });
