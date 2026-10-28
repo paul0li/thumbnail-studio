@@ -19,6 +19,8 @@ function server(version: number): ThumbnailState {
     downloaded: false,
     export_url: null,
     exported_at: null,
+    export_improved: false,
+    improvement: null,
     document: b,
     history: [{ version: version - 1, document: a }],
   };

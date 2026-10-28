@@ -1,8 +1,10 @@
 import "./styles.css";
 import {
+  ApiError,
   deleteThumbnail,
   duplicateThumbnail,
   getConfig,
+  getImprovement,
   getThumbnail,
   listPhotos,
   listThumbnails,
@@ -10,12 +12,16 @@ import {
   Offline,
   putPicture,
   setRole,
+  startImprovement,
+  useImprovement,
+  type Improvement,
   type ThumbnailState,
   type ThumbnailSummary,
 } from "./api";
 import { loadFont } from "./canvas/fonts";
 import { Scene } from "./canvas/scene";
 import { findLayer, people } from "./document/edit";
+import { engineScene, overlayLayers } from "./document/improve";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type DesignDocument } from "./document/types";
 import { validateDocument, type ValidationResult } from "./document/validate";
 import { fromServer, reconcile, type Start } from "./open";
@@ -24,6 +30,7 @@ import { readLocal, Saver, type SyncStatus } from "./sync";
 import { describeDocument, layerName } from "./ui/describe";
 import { advanced, announce, clear, h, keepFocus, toast } from "./ui/dom";
 import { historyPanel } from "./ui/history";
+import { improvePanel, type ImproveState } from "./ui/improve";
 import type { LibraryState } from "./ui/library";
 import { missing } from "./ui/progress";
 import { startOfDay } from "./ui/routine";
@@ -35,8 +42,10 @@ const STEP_KEY = "thumbnail-studio:step:v2";
 const LEGACY_DRAFT_KEY = "thumbnail-studio:draft:v1";
 const PREVIEW_DELAY_MS = 2500;
 const PREVIEW_WIDTH = 640;
+const POLL_MS = 2000;
 
-type View = StepId | "done";
+/** After the steps: «Mejorar» (the wait and the result), then «done». */
+type View = StepId | "improve" | "done";
 type Screen = "editor" | "history";
 
 function storage(): Storage | null {
@@ -51,7 +60,7 @@ function loadView(id: string): View | null {
   try {
     const saved = JSON.parse(storage()?.getItem(STEP_KEY) ?? "null") as { id?: string; view?: string } | null;
     const view = saved?.view;
-    if (saved?.id === id && view && (view === "done" || STEPS.some((s) => s.id === view))) return view as View;
+    if (saved?.id === id && view && (view === "done" || view === "improve" || STEPS.some((s) => s.id === view))) return view as View;
   } catch {
     // Storage blocked or garbled: start at the beginning.
   }
@@ -94,11 +103,20 @@ function routeId(): string | null {
 
 const routeScreen = (): Screen => (window.location.hash === "#/miniaturas" ? "history" : "editor");
 
-async function exportBlob(scene: Scene): Promise<Blob> {
-  const canvas = await scene.exportCanvas();
+function pngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("export failed"))), "image/png"),
   );
+}
+
+async function exportBlob(scene: Scene): Promise<Blob> {
+  return pngBlob(await scene.exportCanvas());
+}
+
+async function fetchBlob(url: string): Promise<Blob> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`could not load ${url}`);
+  return response.blob();
 }
 
 async function previewBlob(scene: Scene): Promise<Blob> {
@@ -147,6 +165,14 @@ async function main(): Promise<void> {
   let screen: Screen = routeScreen();
   let recent: ThumbnailSummary[] | null = null;
   let recentError: string | null = null;
+  /** «Mejorar» for the thumbnail on screen, if it was asked for. */
+  let improving: ImproveState | null = null;
+  /** The improved picture, loaded as soon as it is ready, so that «Usar esta»
+   *  can open the share sheet at once (it must follow the tap directly). */
+  let improvedBlob: { url: string; blob: Blob } | null = null;
+  /** The download is an improvement she chose, for this version. */
+  let chosen: { version: number; url: string } | null = null;
+  let pollTimer: number | undefined;
 
   // The canvas is a picture: it is named, and described in words that follow
   // every change.
@@ -295,6 +321,146 @@ async function main(): Promise<void> {
     }
   });
 
+  /** «Descargar otra vez» on the done screen: the improvement if she chose
+   *  it for this version, otherwise her own render. */
+  async function downloadAgain(): Promise<void> {
+    if (chosen && chosen.version === store.version && saver.settled()) {
+      try {
+        const blob = improvedBlob?.url === chosen.url ? improvedBlob.blob : await fetchBlob(chosen.url);
+        await download(blob);
+      } catch {
+        toast("No se pudo descargar la imagen mejorada. Revisa la conexión.", { error: true });
+      }
+      return;
+    }
+    await finish();
+  }
+
+  // --- «Mejorar» (ADR 0010) -------------------------------------------------
+
+  function keepBlob(improvement: Improvement): void {
+    const url = improvement.final_url;
+    if (!url || improvedBlob?.url === url) return;
+    void fetchBlob(url)
+      .then((blob) => (improvedBlob = { url, blob }))
+      .catch(() => undefined);
+  }
+
+  /** Shows a run and keeps asking about it while it runs. */
+  function track(improvement: Improvement): void {
+    window.clearTimeout(pollTimer);
+    const before = improving?.kind === "running" ? improving.improvement.stage : null;
+    if (improvement.status === "running") {
+      improving = { kind: "running", improvement };
+      if (before !== improvement.stage) announce(stageWords(improvement.stage));
+      pollTimer = window.setTimeout(() => void poll(improvement.id), POLL_MS);
+    } else if (improvement.status === "ready") {
+      improving = { kind: "ready", improvement };
+      keepBlob(improvement);
+      if (before) announce("Lista la miniatura mejorada.");
+    } else {
+      improving = { kind: "failed", reason: improvement.reason ?? "Algo salió mal en el servidor." };
+      if (before) announce("No se pudo mejorar.");
+    }
+    if (view === "improve") {
+      render();
+      if (improvement.status !== "running") panel.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
+    }
+  }
+
+  function stageWords(stage: Improvement["stage"]): string {
+    switch (stage) {
+      case "engine":
+        return "La IA está mejorando la escena.";
+      case "faces":
+        return "Devolviendo las caras originales.";
+      case "checks":
+        return "Revisando el título y las personas.";
+      case "frame":
+        return "Poniendo el marco.";
+      case "done":
+        return "Listo.";
+    }
+  }
+
+  async function poll(improvementId: string): Promise<void> {
+    const current = improving?.kind === "running" ? improving.improvement : null;
+    if (!current || current.id !== improvementId || current.thumbnail_id !== store.id) return;
+    try {
+      track(await getImprovement(improvementId));
+    } catch {
+      // The run goes on on the server; ask again in a moment.
+      pollTimer = window.setTimeout(() => void poll(improvementId), POLL_MS * 2);
+    }
+  }
+
+  /** «Mejorar»: the scene without frame or logo, and the overlay with only
+   *  them, both drawn by this same scene, go to the server for the saved
+   *  version on screen. */
+  async function improveNow(): Promise<void> {
+    const required = STEPS.filter((s) => !s.optional && !stepDone(s.id, store));
+    if (required.length) {
+      toast(missing(required.map((s) => s.label)) ?? "", { error: true });
+      go(required[0]!.id);
+      return;
+    }
+    await saver.flush();
+    const version = store.version;
+    // The same run for the same version is shown again, not paid for twice.
+    const known = improving?.kind === "running" || improving?.kind === "ready" ? improving.improvement : null;
+    if (known && known.thumbnail_id === store.id && known.version === version && !store.dirty()) {
+      go("improve");
+      return;
+    }
+    improving = { kind: "sending" };
+    go("improve");
+    if (version === null || store.dirty() || !saver.settled()) {
+      improving = { kind: "failed", reason: "La miniatura todavía no está guardada en el servidor, y hace falta para mejorarla. Revisa la conexión." };
+      render();
+      return;
+    }
+    try {
+      const doc = store.doc;
+      const sceneBlob = await pngBlob(await scene.exportDocument(engineScene(doc, metrics)));
+      const overlay = overlayLayers(doc);
+      const overlayBlob = overlay.length ? await pngBlob(await scene.exportDocument({ ...doc, layers: overlay })) : null;
+      track(await startImprovement(store.id, version, sceneBlob, overlayBlob));
+    } catch (error) {
+      improving = {
+        kind: "failed",
+        reason:
+          error instanceof Offline
+            ? "No hay conexión con el servidor."
+            : error instanceof ApiError
+              ? error.message
+              : "No se pudo preparar la escena para enviarla.",
+      };
+      if (!(error instanceof Offline) && !(error instanceof ApiError)) console.error(error);
+      if (view === "improve") render();
+    }
+  }
+
+  /** «Usar esta»: saved to the phone first (the share sheet must follow the
+   *  tap), then made the thumbnail's download on the server. */
+  async function useImproved(): Promise<void> {
+    if (improving?.kind !== "ready") return;
+    const improvement = improving.improvement;
+    const blob = improvedBlob?.url === improvement.final_url ? improvedBlob.blob : null;
+    if (!blob) {
+      toast("La imagen mejorada todavía se está cargando. Prueba en un momento.");
+      keepBlob(improvement);
+      return;
+    }
+    if (!(await download(blob))) return;
+    try {
+      await useImprovement(improvement.id);
+      chosen = { version: improvement.version, url: improvement.final_url! };
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Se descargó, pero no se pudo guardar en «Mis miniaturas».", { error: true });
+    }
+    go("done");
+  }
+
   let downloading = false;
   async function finish(): Promise<void> {
     if (downloading) return;
@@ -306,6 +472,7 @@ async function main(): Promise<void> {
       const blob = await exportBlob(scene);
       if (await download(blob)) {
         pendingExport = { id: store.id, doc, blob };
+        chosen = null;
         go("done");
         await saver.flush();
         await sendExport();
@@ -339,6 +506,9 @@ async function main(): Promise<void> {
    *  starting a new one), so «atrás» goes back to where the host was. */
   function show(start: Start, firstView: View, mode: "push" | "replace" = "replace"): void {
     window.clearTimeout(previewTimer);
+    window.clearTimeout(pollTimer);
+    improving = null;
+    chosen = null;
     store.open(start.opened);
     saver.reset(start.status);
     view = firstView;
@@ -367,7 +537,14 @@ async function main(): Promise<void> {
     }
     const start = reconcile(id, server, readLocal(storage()));
     if (!start) return false;
-    show(start, viewFor(server === "offline" ? null : server, id), mode);
+    const state = server === "offline" ? null : server;
+    let first = viewFor(state, id);
+    // A run of the version that opened is shown; any other is history.
+    const improvement = state?.improvement && state.improvement.version === start.opened.current.version ? state.improvement : null;
+    if (first === "improve" && !improvement) first = STEPS[STEPS.length - 1]!.id;
+    show(start, first, mode);
+    if (state?.export_improved && state.downloaded && state.export_url) chosen = { version: state.version, url: state.export_url };
+    if (improvement) track(improvement);
     historyMissing = server === "offline";
     return true;
   }
@@ -611,7 +788,18 @@ async function main(): Promise<void> {
 
   function renderBar(): void {
     undo.setAttribute("aria-disabled", String(!store.canUndo()));
+    // While improving, the thumbnail on top is the one that was sent: it is
+    // not edited from here, and «Editar» goes back to the title.
+    undo.hidden = view === "improve";
+    next.hidden = view === "improve";
+    stageWrap.classList.toggle("locked", view === "improve");
     const index = stepIndex();
+    if (view === "improve") {
+      back.hidden = false;
+      back.replaceChildren(h("span", { "aria-hidden": "true", class: "bar-icon" }, "←"), "Editar");
+      back.onclick = () => go(STEPS[STEPS.length - 1]!.id);
+      return;
+    }
     if (view === "done") {
       back.hidden = false;
       back.replaceChildren(h("span", { "aria-hidden": "true", class: "bar-icon" }, "←"), "Editar");
@@ -624,8 +812,8 @@ async function main(): Promise<void> {
     back.replaceChildren(h("span", { "aria-hidden": "true", class: "bar-icon" }, "←"), "Atrás");
     back.onclick = () => go(STEPS[index - 1]!.id);
     const last = index === STEPS.length - 1;
-    next.replaceChildren(last ? "Descargar" : `Siguiente: ${STEPS[index + 1]!.label}`, h("span", { "aria-hidden": "true" }, last ? " ↓" : " →"));
-    next.onclick = last ? () => void finish() : () => go(STEPS[index + 1]!.id);
+    next.replaceChildren(last ? "Mejorar" : `Siguiente: ${STEPS[index + 1]!.label}`, h("span", { "aria-hidden": "true" }, last ? " ✨" : " →"));
+    next.onclick = last ? () => void improveNow() : () => go(STEPS[index + 1]!.id);
   }
 
   function renderPanel(): void {
@@ -644,7 +832,28 @@ async function main(): Promise<void> {
         );
         return;
       }
+      if (view === "improve") {
+        panel.replaceChildren(
+          improvePanel(improving ?? { kind: "failed", reason: "No hay ninguna mejora en curso." }, {
+            use: () => void useImproved(),
+            keepMine: () => void finish(),
+            retry: () => {
+              improving = null;
+              void improveNow();
+            },
+            downloadMine: () => void finish(),
+          }),
+        );
+        return;
+      }
       if (view === "done") {
+        const improved = chosen !== null && chosen.version === store.version;
+        if (improved && chosen && improvedBlob?.url !== chosen.url) {
+          const url = chosen.url;
+          void fetchBlob(url)
+            .then((blob) => (improvedBlob = { url, blob }))
+            .catch(() => undefined);
+        }
         panel.replaceChildren(
           h(
             "div",
@@ -653,9 +862,11 @@ async function main(): Promise<void> {
             h(
               "p",
               {},
-              "Quedó en tu teléfono y en «Mis miniaturas». Para mañana, toca «Hacer una nueva»: el marco y el conductor ya van puestos.",
+              improved
+                ? "Quedó la mejorada en tu teléfono y en «Mis miniaturas». Para mañana, toca «Hacer una nueva»: el marco y el conductor ya van puestos."
+                : "Quedó en tu teléfono y en «Mis miniaturas». Para mañana, toca «Hacer una nueva»: el marco y el conductor ya van puestos.",
             ),
-            h("div", { class: "row" }, h("button", { type: "button", class: "button", on: { click: () => void finish() } }, "Descargar otra vez")),
+            h("div", { class: "row" }, h("button", { type: "button", class: "button", on: { click: () => void downloadAgain() } }, "Descargar otra vez")),
             advanced(
               "thumbnail",
               h("h2", {}, "Esta miniatura"),

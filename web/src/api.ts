@@ -117,6 +117,8 @@ export interface ThumbnailSummary {
   downloaded: boolean;
   export_url: string | null;
   exported_at: string | null;
+  /** The download is an improvement she chose («Usar esta»), not her render. */
+  export_improved: boolean;
 }
 
 export interface SavedVersion {
@@ -128,6 +130,27 @@ export interface ThumbnailState extends ThumbnailSummary {
   document: unknown;
   /** The undo path, oldest first, without the head. */
   history: SavedVersion[];
+  /** The last «Mejorar» of this thumbnail, of any version. */
+  improvement: Improvement | null;
+}
+
+// «Mejorar» (ADR 0010).
+
+export type ImprovementStage = "engine" | "faces" | "checks" | "frame" | "done";
+
+export interface Improvement {
+  id: string;
+  thumbnail_id: string;
+  version: number;
+  status: "running" | "ready" | "failed";
+  stage: ImprovementStage;
+  failure: string | null;
+  /** Why it failed, in Spanish, for the host. */
+  reason: string | null;
+  final_url: string | null;
+  created_at: string;
+  finished_at: string | null;
+  chosen: boolean;
 }
 
 export interface SaveBody {
@@ -200,4 +223,22 @@ export function newThumbnailId(): string {
   const random = new Uint8Array(6);
   crypto.getRandomValues(random);
   return Date.now().toString(16).padStart(12, "0") + Array.from(random, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Sends today's scene (without frame or logo) and the overlay (only them)
+ *  for `version`, and returns the run, which goes on in the background. */
+export async function startImprovement(thumbnailId: string, version: number, scene: Blob, overlay: Blob | null): Promise<Improvement> {
+  const form = new FormData();
+  form.append("scene", scene, "escena.png");
+  if (overlay) form.append("overlay", overlay, "marco.png");
+  return json<Improvement>(await call(`${id(thumbnailId)}/improvements?version=${version}`, { method: "POST", body: form }));
+}
+
+export async function getImprovement(improvementId: string): Promise<Improvement> {
+  return json<Improvement>(await call(`/api/improvements/${encodeURIComponent(improvementId)}`, { cache: "no-store" }));
+}
+
+/** «Usar esta»: the improvement becomes the thumbnail's download. */
+export async function useImprovement(improvementId: string): Promise<ThumbnailSummary> {
+  return json<ThumbnailSummary>(await call(`/api/improvements/${encodeURIComponent(improvementId)}/use`, { method: "POST" }));
 }
