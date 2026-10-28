@@ -1,6 +1,6 @@
 # 0002 — The AI works by layers; protected layers are restored, not trusted
 
-**Status:** Accepted · 2026-10-27
+**Status:** Accepted · 2026-10-27 · Superseded in part by 0010 (how faces are restored: the AI does move things)
 
 ## Context
 

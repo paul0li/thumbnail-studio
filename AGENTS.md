@@ -25,7 +25,7 @@ More in [`README.md`](README.md).
 - [`docs/adr/`](docs/adr/): Architecture Decision Records, one decision per
   file. Read these before changing how something works.
   - [0001 — Start from scratch in a new repository](docs/adr/0001-start-from-scratch.md)
-  - [0002 — The AI works by layers; protected layers are restored, not trusted](docs/adr/0002-layered-ai-with-protected-layers.md)
+  - [0002 — The AI works by layers; protected layers are restored, not trusted](docs/adr/0002-layered-ai-with-protected-layers.md) (in part superseded by 0010)
   - [0003 — The AI runs on a separate machine, with a manual fallback](docs/adr/0003-where-the-ai-runs.md) (superseded by 0006)
   - [0004 — The host is the user](docs/adr/0004-the-host-is-the-user.md)
   - [0005 — TypeScript draws, Python does the image work](docs/adr/0005-stack.md)
@@ -33,6 +33,7 @@ More in [`README.md`](README.md).
   - [0007 — A thumbnail is a layered design document with Figma-style effects](docs/adr/0007-design-document.md)
   - [0008 — The daily thumbnail is a guided routine; fine editing is tucked away](docs/adr/0008-guided-daily-routine.md)
   - [0009 — Thumbnails are saved as versions on the server, with undo as a path](docs/adr/0009-saved-thumbnails.md)
+  - [0010 — «Mejorar» sends the scene, restores faces by registration, checks, and pastes the frame last](docs/adr/0010-improvement-pipeline.md)
 - `CLAUDE.local.md` / `AGENTS.local.md` (gitignored, may not exist): facts about
   one particular installation. Read them if present; never commit them.
 

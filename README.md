@@ -77,9 +77,30 @@ U2NET_HOME=/path/to/models             # rembg downloads u2net here on first use
 With the default provider (`none`) the app says that cutting out is off
 instead of offering a button that does nothing.
 
+### Improving a thumbnail («Mejorar»)
+
+The routine ends with «Mejorar» (ADR 0010). It sends the scene, drawn without
+the frame and the logo, to an image engine, puts the original faces back onto
+what returns, checks that nobody was added and that the title's words are
+exactly what was typed, and only then pastes the frame and logo on top. If
+anything fails, the host reads why and keeps her own thumbnail.
+
+It needs two things on the machine that runs the server:
+
+- **An OpenAI API key** for the image engine, in `.env` as `OPENAI_API_KEY`
+  (see `.env.example` for the model, quality and size, and their cost).
+- **Claude Code**, installed and signed in with the owner's own plan (see
+  Anthropic's Claude Code documentation), on the `PATH` of
+  the server process or named with `STUDIO_CLAUDE_COMMAND`. It reads the
+  result back; without it every improvement fails, visibly.
+
+Face detection uses OpenCV's YuNet model, which is in the repository
+(`server/studio/models/`, MIT). Tests never call the engine or Claude Code.
+
 ### Data
 
-The database, photos and saved thumbnails live in `STUDIO_DATA_DIR` (`./data`
+The database, photos, saved thumbnails and every picture of each improvement
+live in `STUDIO_DATA_DIR` (`./data`
 by default, gitignored). Files are stored by content hash; deleting a photo or
 a thumbnail hides it but keeps its files and versions. Thumbnails are saved as
 the host works, with their undo history, and the browser keeps a copy until
@@ -95,7 +116,9 @@ host (conductor) role to `host` and its guest role to `guest`.
 ## Layout of the code
 
 - `server/studio/`: the FastAPI backend (photo library, cutouts, saved
-  thumbnails, serving the built frontend). Migrations in
+  thumbnails, serving the built frontend). «Mejorar» is `improve.py` (the
+  run), `engine.py` (image engines), `faces.py` (finding and restoring faces)
+  and `readback.py` (the Claude Code check). Migrations in
   `server/studio/migrations/`, tests in `server/tests/`.
 - `schema/`: the design document's JSON Schema, which the server validates
   with, and the cases both validators are tested against.
