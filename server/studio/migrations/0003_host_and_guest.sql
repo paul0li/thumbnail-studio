@@ -1,7 +1,16 @@
 -- `person` splits into `host` and `guest`. SQLite cannot alter a CHECK, so the
--- table is rebuilt. Every person becomes a guest: the server has never known
--- who sat in the host slot (that lived in one browser's draft), and the app
--- moves that one photo to `host` when it adopts the draft.
+-- table is rebuilt. A person whose photo sits in the host slot of any saved
+-- thumbnail (any version, deleted or not) becomes a host; every other person
+-- becomes a guest. The old single browser draft is not on the server: the app
+-- applies the same rule to it when it adopts it.
+--
+-- Runs after `0002_thumbnails` so that it can read the saved documents.
+
+CREATE TEMP TABLE host_photos AS
+SELECT DISTINCT json_extract(layer.value, '$.photo.photoId') AS id
+FROM thumbnail_versions AS v, json_each(v.document, '$.layers') AS layer
+WHERE json_extract(layer.value, '$.kind') = 'person'
+  AND json_extract(layer.value, '$.slot') = 'host';
 
 CREATE TABLE photos_new (
     id           TEXT PRIMARY KEY,
@@ -20,7 +29,13 @@ CREATE TABLE photos_new (
 );
 
 INSERT INTO photos_new
-SELECT id, CASE role WHEN 'person' THEN 'guest' ELSE role END, sha256, path, width, height,
+SELECT id,
+       CASE
+           WHEN role <> 'person' THEN role
+           WHEN id IN (SELECT id FROM host_photos) THEN 'host'
+           ELSE 'guest'
+       END,
+       sha256, path, width, height,
        has_alpha, display_path, display_width, display_height, cut_out, created_at, deleted_at
 FROM photos;
 
@@ -30,6 +45,7 @@ CREATE TEMP TABLE migration_check (ok INTEGER NOT NULL CHECK (ok = 1));
 INSERT INTO migration_check
 SELECT (SELECT count(*) FROM photos) = (SELECT count(*) FROM photos_new);
 DROP TABLE migration_check;
+DROP TABLE host_photos;
 
 DROP TABLE photos;
 ALTER TABLE photos_new RENAME TO photos;

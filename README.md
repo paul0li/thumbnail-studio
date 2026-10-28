@@ -86,6 +86,12 @@ the host works, with their undo history, and the browser keeps a copy until
 the server confirms each save (ADR 0009). The schema is created and upgraded
 by numbered migrations when the server starts.
 
+People in the library are either a `host` or a `guest`. Libraries from before
+that split had a single `person` role: on upgrade, a person whose photo is in
+the host slot of any saved thumbnail becomes a host and every other person a
+guest. A future import from the previous version's library must map its
+host (conductor) role to `host` and its guest role to `guest`.
+
 ## Layout of the code
 
 - `server/studio/`: the FastAPI backend (photo library, cutouts, saved
