@@ -22,6 +22,8 @@ More in [`README.md`](README.md).
 ## Where things are written down
 
 - [`README.md`](README.md): what the app does and for whom.
+- [`docs/how-to-run.md`](docs/how-to-run.md): installing, running, testing and
+  configuring it.
 - [`docs/adr/`](docs/adr/): Architecture Decision Records, one decision per
   file. Read these before changing how something works.
   - [0001 — Start from scratch in a new repository](docs/adr/0001-start-from-scratch.md)
