@@ -71,6 +71,11 @@ def shifted(image, dx, dy, scale):
 FACE = faces.SceneFace("p", faces.Box(500, 250, 640, 420), 1.0)
 
 
+def whole(scene):
+    """The scene as one person layer covering the canvas."""
+    return [placement(scene)]
+
+
 def test_registration_finds_how_the_engine_moved_and_scaled_a_face():
     scene = texture((1280, 720), seed=5)
     result = shifted(scene, 40, -20, 1.08)
@@ -85,7 +90,7 @@ def test_a_face_that_is_not_in_the_result_is_not_restored():
     scene = texture((1280, 720), seed=5)
     other = bgr(texture((1280, 720), seed=6))
     with pytest.raises(faces.FaceNotRestored):
-        faces.restore(bgr(scene), other, [FACE])
+        faces.restore(bgr(scene), other, [FACE], whole(scene))
 
 
 def test_restoring_puts_the_original_face_back_where_it_went():
@@ -95,7 +100,7 @@ def test_restoring_puts_the_original_face_back_where_it_went():
     region = (slice(250, 450), slice(560, 720))
     result[region] = cv2.GaussianBlur(result[region], (0, 0), 6)
     expected = shifted(scene, 40, -20, 1.08)
-    restored = faces.restore(bgr(scene), result, [FACE])
+    restored = faces.restore(bgr(scene), result, [FACE], whole(scene))
     inner = (slice(300, 400), slice(600, 680))
     sharpness = [cv2.Laplacian(img[inner], cv2.CV_64F).var() for img in (result, restored.image)]
     # The detail is back (its colour is matched to the blurred light, so the
@@ -109,11 +114,29 @@ def test_restoring_puts_the_original_face_back_where_it_went():
     assert np.array_equal(restored.image[far], result[far])
 
 
+def test_what_sits_over_the_head_in_the_scene_is_not_pasted_back():
+    # The person's layer stops above the head; the scene has the plain title
+    # there, which the engine moved away.
+    person = texture((1280, 720), seed=5).convert("RGBA")
+    person.paste((0, 0, 0, 0), (0, 0, 1280, 230))
+    background = texture((1280, 720), seed=7)
+    clean = background.copy()
+    clean.paste(person, (0, 0), person)
+    scene = clean.copy()
+    scene.paste((255, 255, 255), (520, 180, 620, 225))
+    result = shifted(clean, 40, -20, 1.08)
+    restored = faces.restore(bgr(scene), result, [FACE], [placement(person)])
+    assert restored.registrations
+    # Where the old title would land, the result is untouched.
+    above = (slice(180, 220), slice(600, 690))
+    assert np.array_equal(restored.image[above], result[above])
+
+
 def test_hidden_faces_are_not_registered():
     scene = texture((1280, 720), seed=5)
     other = bgr(texture((1280, 720), seed=6))
     hidden = faces.SceneFace("p", FACE.box, 0.2)
-    assert faces.restore(bgr(scene), other, [hidden]).registrations == []
+    assert faces.restore(bgr(scene), other, [hidden], whole(scene)).registrations == []
 
 
 def test_a_large_new_face_is_extra_and_a_known_or_small_one_is_not():
