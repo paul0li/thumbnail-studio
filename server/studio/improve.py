@@ -413,7 +413,8 @@ class Pipeline:
         title = document.title_text(doc)
 
         # Where the faces are, from the layers, before spending anything.
-        found = faces.faces_in_layers(placements(self.settings, doc), self.detector)
+        people = placements(self.settings, doc)
+        found = faces.faces_in_layers(people, self.detector)
         report["faces"] = [f.as_json() for f in found]
 
         try:
@@ -434,7 +435,7 @@ class Pipeline:
 
         scene_bgr = _bgr(scene_image)
         try:
-            restored = faces.restore(scene_bgr, _bgr(fitted), found)
+            restored = faces.restore(scene_bgr, _bgr(fitted), found, people)
         except faces.FaceNotRestored as exc:
             report["unrestored"] = {**exc.face.as_json(), "why": exc.reason}
             raise Failure(

@@ -8,6 +8,11 @@ against the result, a similarity transform (move, scale, a little rotation) is
 fitted with RANSAC, and the original face is warped by it, its colour matched
 to the result's light, and pasted inside a feathered ellipse.
 
+What is pasted comes from the person's own layer, never from the composed
+scene: the scene has the plain title and whatever else sits around a head,
+and the model usually moves those. Pasting the scene's pixels would leave a
+faded copy of the old title over the new one.
+
 A face that cannot be registered confidently is not pasted approximately: the
 whole result is rejected, because an unrestored face is exactly what the
 improvement must never ship.
@@ -202,16 +207,23 @@ class Placement:
         bx, by = self.to_canvas(box.x1, box.y1)
         return Box(min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
 
-    def alpha_on_canvas(self) -> np.ndarray:
-        """This layer's coverage of the canvas, 0..1."""
+    def on_canvas(self) -> tuple[np.ndarray, np.ndarray]:
+        """This layer drawn alone on the canvas: its pixels (BGR) and its
+        coverage, 0..1."""
         w = max(1, round(self.width * self.scale))
         h = max(1, round(self.height * self.scale))
-        alpha = self.image.convert("RGBA").getchannel("A").resize((w, h), Image.Resampling.BILINEAR)
+        photo = self.image.convert("RGBA").resize((w, h), Image.Resampling.BILINEAR)
         if self.flip_x:
-            alpha = alpha.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-        canvas = Image.new("L", CANVAS, 0)
-        canvas.paste(alpha, (round(self.x - w / 2), round(self.y - h / 2)))
-        return np.asarray(canvas, dtype=np.float32) / 255
+            photo = photo.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        canvas = Image.new("RGBA", CANVAS, (0, 0, 0, 0))
+        canvas.paste(photo, (round(self.x - w / 2), round(self.y - h / 2)))
+        pixels = np.asarray(canvas)
+        bgr = cv2.cvtColor(np.ascontiguousarray(pixels[..., :3]), cv2.COLOR_RGB2BGR)
+        return bgr, pixels[..., 3].astype(np.float32) / 255
+
+    def alpha_on_canvas(self) -> np.ndarray:
+        """This layer's coverage of the canvas, 0..1."""
+        return self.on_canvas()[1]
 
 
 @dataclass(frozen=True)
@@ -251,13 +263,31 @@ def faces_in_layers(people: list[Placement], detector: Detector | None = None) -
     coverage = [p.alpha_on_canvas() for p in people]
     found: list[SceneFace] = []
     for i, person in enumerate(people):
-        above = np.zeros(CANVAS[::-1], np.float32)
-        for later in coverage[i + 1 :]:
-            above = np.maximum(above, later)
+        above = _above(coverage, i)
         for detection in detector(_on_grey(person.image), CUTOUT_SCORE):
             box = person.box_to_canvas(detection.box)
             found.append(SceneFace(person.layer_id, box, _visible(box, above)))
     return found
+
+
+def _above(coverage: list[np.ndarray], i: int) -> np.ndarray:
+    """How much of the canvas the layers drawn after layer `i` cover, 0..1."""
+    above = np.zeros(CANVAS[::-1], np.float32)
+    for later in coverage[i + 1 :]:
+        above = np.maximum(above, later)
+    return above
+
+
+def visible_layers(people: list[Placement]) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Each person as drawn alone on the canvas: pixels (BGR) and how much of
+    them shows, 0..1, which is their own coverage less what later people
+    cover. `people` are in drawing order."""
+    drawn = [p.on_canvas() for p in people]
+    coverage = [alpha for _, alpha in drawn]
+    return {
+        person.layer_id: (pixels, coverage[i] * (1 - _above(coverage, i)))
+        for i, (person, (pixels, _)) in enumerate(zip(people, drawn, strict=True))
+    }
 
 
 def _visible(box: Box, above: np.ndarray) -> float:
@@ -433,12 +463,20 @@ def register(
     return Registration(face, matrix, len(pairs), count, agreement)
 
 
-def restore(scene: np.ndarray, result: np.ndarray, faces: list[SceneFace]) -> Restored:
+def restore(
+    scene: np.ndarray,
+    result: np.ndarray,
+    faces: list[SceneFace],
+    people: list[Placement],
+) -> Restored:
     """`result` with every protected face of `scene` put back. Both are BGR,
-    the same size. Raises FaceNotRestored on the first face that cannot be."""
+    the same size. Where a face went is found in `scene`; what is pasted is
+    the face's own layer among `people` (drawing order), only where it shows.
+    Raises FaceNotRestored on the first face that cannot be."""
     if scene.shape != result.shape:
         raise ValueError("scene and result must be the same size")
     height, width = scene.shape[:2]
+    layers = visible_layers(people)
     sift = cv2.SIFT_create(4000)
     result_features = sift.detectAndCompute(cv2.cvtColor(result, cv2.COLOR_BGR2GRAY), None)
     out = result.astype(np.float32)
@@ -448,11 +486,14 @@ def restore(scene: np.ndarray, result: np.ndarray, faces: list[SceneFace]) -> Re
             continue
         reg = register(scene, result, face, result_features)
         registrations.append(reg)
-        original = cv2.warpAffine(scene, reg.matrix, (width, height), flags=cv2.INTER_LANCZOS4)
+        pixels, shows = layers[face.layer_id]
+        original = cv2.warpAffine(pixels, reg.matrix, (width, height), flags=cv2.INTER_LANCZOS4)
         region = _restore_region(face)
         mask = cv2.warpAffine(_ellipse(region, (height, width)), reg.matrix, (width, height))
         feather = max(2.0, 0.08 * region.height * reg.scale)
         mask = cv2.GaussianBlur(mask, (0, 0), feather)
+        # The cutout's own edge is the feather where the ellipse goes past it.
+        mask = mask * cv2.warpAffine(shows, reg.matrix, (width, height), flags=cv2.INTER_LINEAR)
         original = _match_colour(original, result, mask)
         out = out * (1 - mask[..., None]) + original.astype(np.float32) * mask[..., None]
     return Restored(np.clip(out, 0, 255).astype(np.uint8), registrations)
