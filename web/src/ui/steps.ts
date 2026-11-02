@@ -1,5 +1,6 @@
 // The daily routine as four steps, each with one question and one choice.
-// Everything else is in «Edición avanzada», closed.
+// Everything else is in «Edición avanzada», closed. Uploading and «Edición
+// avanzada» come before the photos, so they are reachable without scrolling.
 
 import { photoRef, type Photo } from "../api";
 import {
@@ -107,6 +108,8 @@ function hostStep(c: StepContext): HTMLElement[] {
   const host = people(store.doc, "host")[0];
   return [
     h("p", { class: "muted" }, "Toca su foto. Queda a la derecha."),
+    uploadButton(c.library, "host", c.rerender, c.refresh),
+    advanced("host", host ? personControls(store, host) : h("p", { class: "muted" }, "Elige primero al conductor.")),
     photoGrid(
       c.library,
       {
@@ -122,8 +125,6 @@ function hostStep(c: StepContext): HTMLElement[] {
       },
       c.refresh,
     ),
-    uploadButton(c.library, "host", c.rerender, c.refresh),
-    advanced("host", host ? personControls(store, host) : h("p", { class: "muted" }, "Elige primero al conductor.")),
   ];
 }
 
@@ -140,6 +141,11 @@ function guestsStep(c: StepContext): HTMLElement[] {
         : guests.length === 1
           ? "1 invitado elegido. Toca otra foto para sumar uno más, o sigue."
           : `${guests.length} invitados elegidos. Toca una foto elegida para quitarla.`,
+    ),
+    uploadButton(c.library, "guest", c.rerender, c.refresh),
+    advanced(
+      "guests",
+      ...(guests.length ? guests.map((g) => personControls(store, g)) : [h("p", { class: "muted" }, "Elige primero a los invitados.")]),
     ),
     photoGrid(
       c.library,
@@ -161,11 +167,6 @@ function guestsStep(c: StepContext): HTMLElement[] {
         onCutOut: cutOutInPlace(store),
       },
       c.refresh,
-    ),
-    uploadButton(c.library, "guest", c.rerender, c.refresh),
-    advanced(
-      "guests",
-      ...(guests.length ? guests.map((g) => personControls(store, g)) : [h("p", { class: "muted" }, "Elige primero a los invitados.")]),
     ),
   ];
 }
@@ -194,21 +195,6 @@ function backgroundStep(c: StepContext): HTMLElement[] {
     );
   return [
     h("p", { class: "muted" }, "Toca una foto. Se ve detrás de todo."),
-    photoGrid(
-      c.library,
-      {
-        role: "background",
-        chosen: new Set(bg.photo ? [bg.photo.photoId] : []),
-        verb: "Fondo",
-        empty: "Todavía no hay fondos. Sube una foto para empezar.",
-        pick: (photo) => {
-          store.commit(setBackgroundPhoto(store.doc, photoRef(photo)));
-          announce("Fondo elegido. Sigue con «Siguiente».");
-        },
-        onCutOut: cutOutInPlace(store),
-      },
-      c.refresh,
-    ),
     uploadButton(c.library, "background", c.rerender, c.refresh),
     advanced(
       "background",
@@ -252,11 +238,26 @@ function backgroundStep(c: StepContext): HTMLElement[] {
       ),
       h("h2", {}, "Marco"),
       h("p", { class: "muted" }, "El marco del programa se pone solo en cada miniatura nueva."),
-      brandGrid("frame"),
       uploadButton(c.library, "frame", c.rerender, c.refresh),
+      brandGrid("frame"),
       h("h2", {}, "Logo"),
-      brandGrid("logo"),
       uploadButton(c.library, "logo", c.rerender, c.refresh),
+      brandGrid("logo"),
+    ),
+    photoGrid(
+      c.library,
+      {
+        role: "background",
+        chosen: new Set(bg.photo ? [bg.photo.photoId] : []),
+        verb: "Fondo",
+        empty: "Todavía no hay fondos. Sube una foto para empezar.",
+        pick: (photo) => {
+          store.commit(setBackgroundPhoto(store.doc, photoRef(photo)));
+          announce("Fondo elegido. Sigue con «Siguiente».");
+        },
+        onCutOut: cutOutInPlace(store),
+      },
+      c.refresh,
     ),
   ];
 }
