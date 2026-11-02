@@ -30,7 +30,7 @@ current directory.
 
 | Target | What it does |
 | --- | --- |
-| `make install` | `uv sync`, then `npm ci` in `web/`. |
+| `make install` | `uv sync --inexact`, then `npm ci` in `web/`. `--inexact` keeps rembg if `make install-cutout` added it; a plain `uv sync` without `--extra cutout` removes it. |
 | `make install-cutout` | Optional: `uv sync --extra cutout`, which adds rembg for cutting people out. |
 | `make serve` | `make build`, then `python -m studio` with the configured host and port. |
 | `make build` | Builds the frontend into `web/dist`, which the backend serves. |

@@ -5,7 +5,8 @@ API_PORT ?= 8000
 WEB_PORT ?= 5173
 
 install:  ## Python and frontend dependencies, project-local
-	uv sync
+	# --inexact keeps an installed optional extra (rembg) instead of removing it
+	uv sync --inexact
 	cd web && npm ci
 
 install-cutout:  ## Optional: rembg for cutting people out (model goes in U2NET_HOME)
