@@ -61,9 +61,12 @@ People:
   only partly visible. Do not duplicate anyone.
 
 Background:
-- Keep the background's subject, but darken and simplify it behind the
-  people so they stand out. Keep its characters as they are; do not turn any
-  of them into a real person.
+- Keep the background's subject and its vivid, saturated colours. Do not
+  darken it, dim it or wash it out, and add no dark vignette.
+- Make the people stand out through contrast instead: simplify the
+  background's detail behind them, soften its focus a little, and let the
+  rim light separate them from it. Keep its characters as they are; do not
+  turn any of them into a real person.
 
 Title:
 - Restyle the title so it stands out, and place it where it reads best
