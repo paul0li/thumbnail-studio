@@ -1,24 +1,26 @@
 // What «Mejorar» sends (ADR 0010). The image engine gets the scene: the
-// background, the people and the title in its plain style, all words alike,
-// as the routine first draws it. The frame and the logo carry the show's
+// background, the people and the title (and subtitle, if any) in their plain
+// style, all words alike, as the routine first draws them. The frame and the logo carry the show's
 // name and are never sent: they are drawn apart, as an overlay, and pasted on
 // top of the engine's result on the server.
 
 import { autoBreaks, type Metrics } from "./layout";
 import { brandStyle } from "./presets";
-import { AUTO_WRAP_WIDTH, defaultWord, splitWords } from "./title";
-import type { DesignDocument, Layer, TitleLayer } from "./types";
+import { AUTO_WRAP_WIDTH, defaultSize, defaultWord, splitWords } from "./title";
+import { isText, type DesignDocument, type Layer, type TextLayer } from "./types";
 
 const isOverlay = (layer: Layer): boolean => layer.kind === "frame" || layer.kind === "logo";
 
-/** The title as a new thumbnail draws it: the typed words, each in the
- *  brand style at the same size, wrapped automatically. Where it is and how
- *  big it is stay as the host left them. */
-export function plainTitle(title: TitleLayer, metrics: Metrics): TitleLayer {
-  const words = splitWords(title.text).map(defaultWord);
+/** The title (or subtitle) as a new thumbnail draws it: the typed words,
+ *  each in the brand style at the same size, wrapped automatically. Where it
+ *  is and how big it is stay as the host left them. */
+export function plainTitle<T extends TextLayer>(title: T, metrics: Metrics): T {
+  const words = splitWords(title.text).map((w) => defaultWord(w, defaultSize(title.kind)));
   return {
     ...title,
     ...brandStyle(),
+    // Only the title carries the show's accent bar.
+    ...(title.kind === "subtitle" ? { accent: null } : {}),
     autoBreaks: true,
     align: "left",
     words: autoBreaks(words, AUTO_WRAP_WIDTH, metrics),
@@ -26,11 +28,11 @@ export function plainTitle(title: TitleLayer, metrics: Metrics): TitleLayer {
 }
 
 /** The document the engine sees: everything but the frame and the logo, with
- *  a plain title. */
+ *  plain text. */
 export function engineScene(doc: DesignDocument, metrics: Metrics): DesignDocument {
   return {
     ...doc,
-    layers: doc.layers.filter((l) => !isOverlay(l)).map((l) => (l.kind === "title" ? plainTitle(l, metrics) : l)),
+    layers: doc.layers.filter((l) => !isOverlay(l)).map((l) => (isText(l) ? plainTitle(l, metrics) : l)),
   };
 }
 

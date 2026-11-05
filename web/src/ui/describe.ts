@@ -14,6 +14,8 @@ export function layerName(doc: DesignDocument, layer: Layer): string {
       return "Logo";
     case "title":
       return "Título";
+    case "subtitle":
+      return "Subtítulo";
     case "person": {
       if (layer.slot === "host") return "Conductor";
       const guests = doc.layers.filter((l) => l.kind === "person" && l.slot === "guest");
@@ -40,6 +42,9 @@ export function describeDocument(doc: DesignDocument): string {
         break;
       case "title":
         parts.push(`Título: «${layer.text}».`);
+        break;
+      case "subtitle":
+        parts.push(`Subtítulo: «${layer.text}».`);
         break;
       case "logo":
         parts.push(`Logo ${whereIs(layer.x, layer.y)}.`);

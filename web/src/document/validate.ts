@@ -159,7 +159,7 @@ class Checker {
       }
     });
     if (typeof o.text === "string" && texts.length === words.length && !wordsMatchText(texts, o.text)) {
-      this.fail(`${path}.words`, "must be exactly the words of the typed title, in order");
+      this.fail(`${path}.words`, "must be exactly the words of the typed text, in order");
     }
   }
 }
@@ -211,6 +211,7 @@ export function validateDocument(input: unknown): ValidationResult {
         c.photo(layer.photo, `${path}.photo`);
         break;
       case "title":
+      case "subtitle":
         c.title(layer, path);
         break;
       default:
@@ -218,7 +219,7 @@ export function validateDocument(input: unknown): ValidationResult {
     }
   });
   if (counts.background !== 1) c.fail("layers", "must have exactly one background");
-  for (const kind of ["title", "logo", "frame"]) {
+  for (const kind of ["title", "subtitle", "logo", "frame"]) {
     if ((counts[kind] ?? 0) > 1) c.fail("layers", `may have at most one ${kind}`);
   }
 

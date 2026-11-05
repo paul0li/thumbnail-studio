@@ -1,9 +1,11 @@
 // The title is made of the words the host typed, and nothing else.
 
 import { autoBreaks, type Metrics } from "./layout";
-import { BRAND, type TitleLayer, type Word } from "./types";
+import { BRAND, type TextKind, type TextLayer, type Word } from "./types";
 
 export const DEFAULT_WORD_SIZE = 80;
+/** The subtitle starts at about half the title's size. */
+export const SUBTITLE_WORD_SIZE = 44;
 /** How wide an automatically wrapped line may get, in title pixels. */
 export const AUTO_WRAP_WIDTH = 940;
 export const MIN_WORD_SIZE = 40;
@@ -25,10 +27,15 @@ export function wordsMatchText(words: readonly string[], text: string): boolean 
   return typed.length === words.length && typed.every((w, i) => fold(w) === fold(words[i]!));
 }
 
-export function defaultWord(text: string): Word {
+/** The size every word of a plain title or subtitle starts at. */
+export function defaultSize(kind: TextKind): number {
+  return kind === "subtitle" ? SUBTITLE_WORD_SIZE : DEFAULT_WORD_SIZE;
+}
+
+export function defaultWord(text: string, size: number = DEFAULT_WORD_SIZE): Word {
   return {
     text,
-    size: DEFAULT_WORD_SIZE,
+    size,
     fill: { type: "solid", color: BRAND.white },
     box: null,
     breakBefore: false,
@@ -40,14 +47,14 @@ export function defaultWord(text: string): Word {
  * was in its place; new words at the end take the style of the last one.
  * With `autoBreaks` on, lines are rewrapped; otherwise the breaks stay by position.
  */
-export function retitle(title: TitleLayer, text: string, metrics: Metrics | null): TitleLayer {
+export function retitle<T extends TextLayer>(title: T, text: string, metrics: Metrics | null): T {
   const typed = splitWords(text);
   const last = title.words[title.words.length - 1];
   let words: Word[] = typed.map((w, i) => {
     const previous = title.words[i];
     if (previous) return { ...previous, text: w };
     if (last) return { ...last, text: w, breakBefore: false };
-    return defaultWord(w);
+    return defaultWord(w, defaultSize(title.kind));
   });
   if (title.autoBreaks && metrics) words = autoBreaks(words, AUTO_WRAP_WIDTH, metrics);
   return { ...title, text, words };

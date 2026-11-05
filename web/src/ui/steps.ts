@@ -263,7 +263,7 @@ function backgroundStep(c: StepContext): HTMLElement[] {
 }
 
 function titleStep(c: StepContext): HTMLElement[] {
-  return [titlePanel(c.store, c.metrics)];
+  return [titlePanel(c.store, c.metrics), titlePanel(c.store, c.metrics, "subtitle")];
 }
 
 export function stepPanel(id: StepId, c: StepContext): HTMLElement[] {

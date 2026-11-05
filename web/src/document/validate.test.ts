@@ -47,7 +47,7 @@ describe("validateDocument", () => {
     const t = doc.layers.find((l) => l.kind === "title")!;
     if (t.kind !== "title") throw new Error();
     t.words[1]!.text = "LA";
-    expect(errors(doc)).toContain("layers[1].words: must be exactly the words of the typed title, in order");
+    expect(errors(doc)).toContain("layers[1].words: must be exactly the words of the typed text, in order");
   });
 
   it("rejects a title with a word missing or added", () => {

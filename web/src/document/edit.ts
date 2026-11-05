@@ -1,8 +1,9 @@
 // Edits to the design document. Each takes a document and returns a new one;
 // gestures and panels only ever change the thumbnail through these.
 
+import { accentRule, autoBreaks, layoutTitle, type Metrics } from "./layout";
 import { brandStyle } from "./presets";
-import { defaultWord, splitWords } from "./title";
+import { AUTO_WRAP_WIDTH, defaultWord, retitle, splitWords, SUBTITLE_WORD_SIZE } from "./title";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -14,7 +15,11 @@ import {
   type MovableLayer,
   type PersonLayer,
   type PhotoRef,
+  type SubtitleLayer,
+  type TextKind,
+  type TextLayer,
   type TitleLayer,
+  isText,
 } from "./types";
 
 export const MIN_SCALE_PX = 60;
@@ -43,7 +48,7 @@ export function newDocument(title = SAMPLE_TITLE): DesignDocument {
     id: newId("title"),
     kind: "title",
     text: title,
-    words: splitWords(title).map(defaultWord),
+    words: splitWords(title).map((w) => defaultWord(w)),
     autoBreaks: true,
     align: "left",
     // Top left, where the show's title always goes.
@@ -75,6 +80,14 @@ export function background(doc: DesignDocument): BackgroundLayer {
 
 export function title(doc: DesignDocument): TitleLayer | undefined {
   return doc.layers.find((l): l is TitleLayer => l.kind === "title");
+}
+
+export function subtitle(doc: DesignDocument): SubtitleLayer | undefined {
+  return doc.layers.find((l): l is SubtitleLayer => l.kind === "subtitle");
+}
+
+export function textLayer(doc: DesignDocument, kind: TextKind): TextLayer | undefined {
+  return kind === "title" ? title(doc) : subtitle(doc);
 }
 
 function replaceLayer(doc: DesignDocument, id: string, change: (layer: Layer) => Layer): DesignDocument {
@@ -195,14 +208,14 @@ export function removeLayer(doc: DesignDocument, id: string): DesignDocument {
   return { ...doc, layers: doc.layers.filter((l) => l.id !== id) };
 }
 
-/** The size, in canvas pixels, of a movable layer's photo; null for the title. */
+/** The size, in canvas pixels, of a movable layer's photo; null for text. */
 function photoSize(layer: MovableLayer, scale: number): { w: number; h: number } | null {
-  if (layer.kind === "title") return null;
+  if (isText(layer)) return null;
   return { w: layer.photo.width * scale, h: layer.photo.height * scale };
 }
 
 export function clampScale(layer: MovableLayer, scale: number): number {
-  if (layer.kind === "title") return Math.min(4, Math.max(0.25, scale));
+  if (isText(layer)) return Math.min(4, Math.max(0.25, scale));
   const longest = Math.max(layer.photo.width, layer.photo.height);
   return Math.min(MAX_SCALE_PX / longest, Math.max(MIN_SCALE_PX / longest, scale));
 }
@@ -215,7 +228,7 @@ export function clampCentre(x: number, y: number): { x: number; y: number } {
 
 export function placeLayer(doc: DesignDocument, id: string, x: number, y: number, scale?: number): DesignDocument {
   return replaceLayer(doc, id, (l) => {
-    if (l.kind !== "person" && l.kind !== "logo" && l.kind !== "title") return l;
+    if (l.kind !== "person" && l.kind !== "logo" && !isText(l)) return l;
     const s = clampScale(l, scale ?? l.scale);
     if (photoSize(l, s)) {
       const c = clampCentre(x, y);
@@ -249,7 +262,7 @@ export function canReorder(doc: DesignDocument, id: string, step: 1 | -1): boole
 
 export function setEffects(doc: DesignDocument, id: string, effects: Effect[]): DesignDocument {
   return replaceLayer(doc, id, (l) =>
-    l.kind === "person" || l.kind === "logo" || l.kind === "title" ? { ...l, effects } : l,
+    l.kind === "person" || l.kind === "logo" || isText(l) ? { ...l, effects } : l,
   );
 }
 
@@ -259,11 +272,68 @@ export function updateTitle(doc: DesignDocument, change: (t: TitleLayer) => Titl
   return replaceLayer(doc, t.id, () => change(t));
 }
 
+export function updateText(doc: DesignDocument, kind: TextKind, change: (t: TextLayer) => TextLayer): DesignDocument {
+  const t = textLayer(doc, kind);
+  if (!t) return doc;
+  return replaceLayer(doc, t.id, () => change(t));
+}
+
+/** How far below the title's block (and its accent bar) a new subtitle starts. */
+const SUBTITLE_GAP = 18;
+
+/** Types the subtitle. The first word creates it, just under the title, left
+ *  aligned with it, in the brand's effects without the accent bar; clearing
+ *  it takes it away. */
+export function setSubtitle(doc: DesignDocument, text: string, metrics: Metrics | null): DesignDocument {
+  const current = subtitle(doc);
+  if (splitWords(text).length === 0) {
+    return current ? { ...doc, layers: doc.layers.filter((l) => l !== current) } : doc;
+  }
+  if (current) return replaceLayer(doc, current.id, () => retitle(current, text, metrics));
+  const t = title(doc);
+  let x = 50;
+  let y = 250;
+  if (t) {
+    x = t.x;
+    let bottom = 0;
+    if (metrics) {
+      const layout = layoutTitle(t.words, t.align, metrics);
+      bottom = layout.height;
+      if (t.accent && layout.lines.length) {
+        const rule = accentRule(layout, t.align);
+        bottom = Math.max(bottom, rule.y + rule.height);
+      }
+    }
+    y = t.y + bottom * t.scale + SUBTITLE_GAP;
+  }
+  let words = splitWords(text).map((w) => defaultWord(w, SUBTITLE_WORD_SIZE));
+  if (metrics) words = autoBreaks(words, AUTO_WRAP_WIDTH, metrics);
+  const layer: SubtitleLayer = {
+    id: newId("subtitle"),
+    kind: "subtitle",
+    text,
+    words,
+    autoBreaks: true,
+    align: "left",
+    x,
+    y: Math.min(CANVAS_HEIGHT - SUBTITLE_WORD_SIZE, y),
+    scale: 1,
+    ...brandStyle(),
+    accent: null,
+  };
+  // Just above the title, so both read over the photos.
+  const at = t ? doc.layers.indexOf(t) + 1 : -1;
+  if (at <= 0) return insertOnTop(doc, layer);
+  const layers = [...doc.layers];
+  layers.splice(at, 0, layer);
+  return { ...doc, layers };
+}
+
 /** The photos a document uses, for highlighting them in the library. */
 export function photosInUse(doc: DesignDocument): Set<string> {
   const ids = new Set<string>();
   for (const l of doc.layers) {
-    if (l.kind === "title") continue;
+    if (isText(l)) continue;
     if (l.photo) ids.add(l.photo.photoId);
   }
   return ids;
@@ -275,7 +345,7 @@ export function replacePhoto(doc: DesignDocument, photo: PhotoRef): DesignDocume
   return {
     ...doc,
     layers: doc.layers.map((l) => {
-      if (l.kind === "title" || !l.photo || l.photo.photoId !== photo.photoId) return l;
+      if (isText(l) || !l.photo || l.photo.photoId !== photo.photoId) return l;
       if (l.kind === "person" || l.kind === "logo") {
         return { ...l, photo, scale: (l.scale * l.photo.height) / photo.height };
       }
@@ -298,10 +368,10 @@ export interface BlockSize {
  *  button alternative to pinching. */
 export function scaleLayerStep(doc: DesignDocument, id: string, step: 1 | -1, block?: BlockSize): DesignDocument {
   const layer = findLayer(doc, id);
-  if (!layer || (layer.kind !== "person" && layer.kind !== "logo" && layer.kind !== "title")) return doc;
+  if (!layer || (layer.kind !== "person" && layer.kind !== "logo" && !isText(layer))) return doc;
   const scale = clampScale(layer, step > 0 ? layer.scale * SCALE_STEP : layer.scale / SCALE_STEP);
   if (Math.abs(scale - layer.scale) < 1e-9) return doc;
-  if (layer.kind !== "title") return placeLayer(doc, id, layer.x, layer.y, scale);
+  if (!isText(layer)) return placeLayer(doc, id, layer.x, layer.y, scale);
   const b = block ?? { width: 0, height: 0 };
   const cx = layer.x + (b.width * layer.scale) / 2;
   const cy = layer.y + (b.height * layer.scale) / 2;

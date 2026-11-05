@@ -1,12 +1,13 @@
 """«Mejorar»: one pass of the image engine over today's scene (ADR 0010).
 
-What goes to the engine is the scene: background, people and the title in its
-plain style, drawn by the browser without the frame and the logo. What comes
-back is fitted to 1280x720, gets the original faces put back by registration,
-is checked (every face restored, nobody added, the title's words exactly as
-typed), and only then gets the browser's overlay (frame and logo) pasted on
-top. Any failure on the way is the result: there is no fallback, and nothing
-is shown as if it were the improvement (ADR 0006).
+What goes to the engine is the scene: background, people and the title (and
+subtitle, if any) in their plain style, drawn by the browser without the frame
+and the logo. What comes back is fitted to 1280x720, gets the original faces
+put back by registration, is checked (every face restored, nobody added, the
+words of the title and subtitle exactly as typed), and only then gets the
+browser's overlay (frame and logo) pasted on top. Any failure on the way is
+the result: there is no fallback, and nothing is shown as if it were the
+improvement (ADR 0006).
 
 A run takes a minute or two, so it runs in the background and the browser
 asks how it is going. Each run is a row in `improvements`, tied to the
@@ -35,7 +36,7 @@ from studio.config import Settings
 from studio.db import Database
 from studio.engine import EngineError, ImageEngine
 from studio.library import Conflict, LibraryError, NotFound, now
-from studio.readback import ReadbackError, TitleReader
+from studio.readback import ReadbackError, Reading, TitleReader
 
 log = logging.getLogger("studio.improve")
 
@@ -80,10 +81,24 @@ Title:
   inside the letters, no metallic, grunge, glow, bevel or 3D extrusion.
 - Keep its words exactly, letter by letter, in the same order, including
   accents and Ñ: "{title}".
-- Add no other text anywhere: no captions, no logos, no watermarks.
+{subtitle}- Add no other text anywhere: no captions, no logos, no watermarks.
 
 Framing: keep the 16:9 landscape framing of the input.
 """
+
+# Only when the host typed a subtitle; it goes inside the title's rules.
+SUBTITLE_RULES = """- Under the title there is a second, smaller line: the subtitle. Restyle it
+  in the same lettering as the title, clearly smaller than the title, and keep
+  it near the title, readable and without covering faces.
+- Keep the subtitle's words exactly, letter by letter, in the same order,
+  including accents and Ñ: "{subtitle}".
+"""
+
+
+def make_prompt(title: str, subtitle: str = "") -> str:
+    rules = SUBTITLE_RULES.format(subtitle=subtitle) if subtitle else ""
+    return PROMPT.format(title=title, subtitle=rules)
+
 
 STAGES = ("engine", "faces", "checks", "frame", "done")
 
@@ -142,6 +157,37 @@ def _same_words(read: str, typed: str) -> bool:
     read = unicodedata.normalize("NFC", read)
     typed = unicodedata.normalize("NFC", typed)
     return document.words_match_text(document.split_words(read), typed)
+
+
+def _check_text(reading: Reading, title: str, subtitle: str) -> None:
+    """Every typed word is drawn, letter by letter, in order. Where the title
+    ends and the subtitle starts is styling the reader may see differently,
+    so the two read together, in order, also pass."""
+    if _same_words(f"{reading.title} {reading.subtitle}", f"{title} {subtitle}"):
+        return
+    if not subtitle:
+        # Text the reader took for a subtitle is not ours to check here.
+        if _same_words(reading.title, title):
+            return
+    elif _same_words(reading.title, title) and _same_words(reading.subtitle, subtitle):
+        return
+    if not _same_words(reading.title, title):
+        shown = " ".join(reading.title.split())
+        raise Failure(
+            "title_changed",
+            f"La IA cambió el título: en la imagen se lee «{shown}»."
+            if shown
+            else "La IA quitó el título de la imagen.",
+            reading.notes,
+        )
+    shown = " ".join(reading.subtitle.split())
+    raise Failure(
+        "subtitle_changed",
+        f"La IA cambió el subtítulo: en la imagen se lee «{shown}»."
+        if shown
+        else "La IA quitó el subtítulo de la imagen.",
+        reading.notes,
+    )
 
 
 # --- What the document says -------------------------------------------------
@@ -282,7 +328,7 @@ class Pipeline:
     # Where runs happen. One at a time: the engine is slow and paid for, and
     # the host makes one thumbnail at a time.
     executor: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=1))
-    prompt: Callable[[str], str] = field(default=lambda title: PROMPT.format(title=title))
+    prompt: Callable[[str, str], str] = make_prompt
 
     def _store(self, data: bytes, image_format: str = "PNG") -> str:
         _, relative = storage.store_bytes(
@@ -414,6 +460,7 @@ class Pipeline:
                 overlay = image.convert("RGBA")
         scene_png = (self.settings.media_dir / row["scene_path"]).read_bytes()
         title = document.title_text(doc)
+        subtitle = document.subtitle_text(doc)
 
         # Where the faces are, from the layers, before spending anything.
         people = placements(self.settings, doc)
@@ -421,7 +468,7 @@ class Pipeline:
         report["faces"] = [f.as_json() for f in found]
 
         try:
-            result = self.engine.edit(scene_png, self.prompt(title))
+            result = self.engine.edit(scene_png, self.prompt(title, subtitle))
         except EngineError as exc:
             raise Failure(exc.code, exc.reason, exc.detail) from None
         report["engine"] = result.info
@@ -473,15 +520,7 @@ class Pipeline:
                 "La IA agregó una persona que no estaba en la miniatura.",
                 reading.notes,
             )
-        if not _same_words(reading.title, title):
-            shown = " ".join(reading.title.split())
-            raise Failure(
-                "title_changed",
-                f"La IA cambió el título: en la imagen se lee «{shown}»."
-                if shown
-                else "La IA quitó el título de la imagen.",
-                reading.notes,
-            )
+        _check_text(reading, title, subtitle)
 
         _update(self.db, improvement_id, stage="frame")
         final_path = self._store(_png(compose(restored_image, overlay)))

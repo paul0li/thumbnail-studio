@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://thumbnail-studio.invalid/design-document.schema.json",
   "title": "Thumbnail Studio design document",
-  "$comment": "The shape of a design document (ADR 0007), shared by the server and the frontend. Rules a JSON Schema cannot say (the frame is the last layer, layer ids are unique, the title's words are exactly the typed text) are checked in code on both sides, against the same cases in schema/cases/. Unknown properties are ignored on both sides.",
+  "$comment": "The shape of a design document (ADR 0007), shared by the server and the frontend. Rules a JSON Schema cannot say (the frame is the last layer, layer ids are unique, the words of the title and the subtitle are exactly the typed text) are checked in code on both sides, against the same cases in schema/cases/. Unknown properties are ignored on both sides.",
   "type": "object",
   "required": [
     "version",
@@ -68,6 +68,21 @@
             "properties": {
               "kind": {
                 "const": "title"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "subtitle"
               }
             },
             "required": [
@@ -620,7 +635,8 @@
             "person",
             "logo",
             "frame",
-            "title"
+            "title",
+            "subtitle"
           ]
         }
       },
@@ -683,6 +699,18 @@
           },
           "then": {
             "$ref": "#/$defs/titleLayer"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "subtitle"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/$defs/subtitleLayer"
           }
         }
       ]
@@ -910,6 +938,84 @@
           ]
         }
       }
+    },
+    "subtitleLayer": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "text",
+        "words",
+        "autoBreaks",
+        "align",
+        "x",
+        "y",
+        "scale",
+        "effects",
+        "accent",
+        "preset"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "subtitle"
+        },
+        "text": {
+          "type": "string"
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/word"
+          }
+        },
+        "autoBreaks": {
+          "type": "boolean"
+        },
+        "align": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "x": {
+          "type": "number",
+          "minimum": -1280,
+          "maximum": 2560
+        },
+        "y": {
+          "type": "number",
+          "minimum": -720,
+          "maximum": 1440
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "effects": {
+          "$ref": "#/$defs/titleEffects"
+        },
+        "accent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/color"
+            }
+          ]
+        },
+        "preset": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "$comment": "Same shape as the title: an optional second line of text with its own place and style."
     },
     "whitespace": {
       "$comment": "The characters JavaScript's \\s matches; a title is split on runs of these. Kept here so both sides read the same list.",

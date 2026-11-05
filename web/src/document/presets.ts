@@ -2,7 +2,7 @@
 // styles, which can then be tweaked one by one. A preset is a starting point,
 // not a mode: nothing remembers it except its name.
 
-import { BRAND, type Effect, type Fill, type TitleLayer, type WordBox } from "./types";
+import { BRAND, type Effect, type Fill, type TextLayer, type WordBox } from "./types";
 
 export interface Preset {
   id: string;
@@ -105,7 +105,7 @@ export function findPreset(id: string): Preset | undefined {
 
 /** The title with the preset's effects and every word restyled by it. Sizes,
  *  words and line breaks are kept. */
-export function applyPreset(title: TitleLayer, id: string): TitleLayer {
+export function applyPreset<T extends TextLayer>(title: T, id: string): T {
   const preset = findPreset(id);
   if (!preset) throw new Error(`unknown preset: ${id}`);
   return {
@@ -118,7 +118,7 @@ export function applyPreset(title: TitleLayer, id: string): TitleLayer {
 }
 
 /** What a new title starts with: the brand preset. */
-export function brandStyle(): Pick<TitleLayer, "effects" | "accent" | "preset"> {
+export function brandStyle(): Pick<TextLayer, "effects" | "accent" | "preset"> {
   const brand = PRESETS[0]!;
   return { effects: brand.effects(), accent: brand.accent(), preset: brand.id };
 }

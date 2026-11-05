@@ -23,7 +23,8 @@ layers. The parts that make the show recognisable are protected:
 
 - the faces of the host and the guests;
 - the show's frame and logo;
-- the words of the title (their style may change, the words may not).
+- the words of the title and of the optional subtitle (their style may change,
+  the words may not).
 
 Everything else is the AI's to improve. The result has to make people want to
 click on a small phone screen, and has to look, at first sight, like an
@@ -76,7 +77,7 @@ a new background and a new title style:
 ![The improved thumbnail](docs/screenshots/after.png)
 
 The original faces are put back onto the result. If that cannot be done
-cleanly, or the AI added someone or changed a word of the title, the
+cleanly, or the AI added someone or changed a word of the title or subtitle, the
 improvement is rejected and the host keeps their own thumbnail.
 
 ## More
@@ -113,7 +114,8 @@ Lo que hace reconocible al programa está protegido:
 
 - las caras de quien conduce y de los invitados;
 - el marco y el logo del programa;
-- las palabras del título (su estilo puede cambiar, las palabras no).
+- las palabras del título y del subtítulo opcional (su estilo puede cambiar,
+  las palabras no).
 
 Todo lo demás lo puede mejorar la IA. El resultado tiene que dar ganas de
 hacer clic en la pantalla pequeña de un teléfono, y tiene que verse, a primera
@@ -167,7 +169,8 @@ con luz nueva, fondo nuevo y un estilo nuevo para el título:
 ![La miniatura mejorada](docs/screenshots/after.png)
 
 Las caras originales se vuelven a poner sobre el resultado. Si eso no se puede
-hacer bien, o la IA agregó a alguien o cambió una palabra del título, la mejora
+hacer bien, o la IA agregó a alguien o cambió una palabra del título o del
+subtítulo, la mejora
 se rechaza y queda la miniatura propia.
 
 ## Más

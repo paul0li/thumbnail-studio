@@ -1,12 +1,13 @@
-// «Título»: type it, pick a look, then tap a word to style it.
+// «Título»: type it, pick a look, then tap a word to style it. The optional
+// subtitle under it works the same way, with its own place and style.
 
-import { SAMPLE_TITLE, title, updateTitle } from "../document/edit";
+import { SAMPLE_TITLE, setSubtitle, textLayer, updateText } from "../document/edit";
 import { layoutTitle, type Metrics } from "../document/layout";
 import { applyPreset, PRESETS } from "../document/presets";
 import { clampSize, retitle } from "../document/title";
-import { BRAND, type Align, type Fill, type TitleLayer, type Word } from "../document/types";
+import { BRAND, type Align, type Fill, type TextKind, type TextLayer, type Word } from "../document/types";
 import type { Store } from "../store";
-import { advanced, announce, h } from "./dom";
+import { advancedNamed, announce, h } from "./dom";
 import { effectsEditor, swatch, swatchRow } from "./effects";
 import { placementControls } from "./placement";
 import { isTitleDone } from "./progress";
@@ -34,22 +35,64 @@ function sameFill(a: Fill, b: Fill): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
-  const t = title(store.doc);
+const SUBTITLE_HINT = "Opcional: una segunda línea más chica. Déjalo vacío si no va.";
+
+/** The subtitle's field before there is a subtitle: typing creates it. */
+function newSubtitleField(store: Store, metrics: Metrics): HTMLElement {
+  const input = h("textarea", {
+    id: "subtitle-text",
+    rows: 2,
+    autocapitalize: "characters",
+    spellcheck: false,
+    "aria-describedby": "subtitle-sample",
+    on: {
+      input: (event: Event) => {
+        const el = event.target as HTMLTextAreaElement;
+        const text = el.value;
+        const next = setSubtitle(store.doc, text, metrics);
+        if (next === store.doc) return;
+        // The first word creates the layer: the panel is rebuilt with its
+        // controls, and the caret goes back where it was.
+        store.commit(next, { key: "subtitle-text" });
+        refocus("subtitle-text");
+      },
+    },
+  });
+  return h(
+    "div",
+    { class: "panel-body" },
+    h("label", { class: "field-label", for: "subtitle-text" }, "Subtítulo"),
+    input,
+    h("p", { class: "muted", id: "subtitle-sample" }, SUBTITLE_HINT),
+  );
+}
+
+function refocus(id: string): void {
+  const el = document.getElementById(id) as HTMLTextAreaElement | null;
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  el.setSelectionRange(el.value.length, el.value.length);
+}
+
+export function titlePanel(store: Store, metrics: Metrics, kind: TextKind = "title"): HTMLElement {
+  const t = textLayer(store.doc, kind);
+  if (!t && kind === "subtitle") return newSubtitleField(store, metrics);
   if (!t) return h("div", { class: "panel-body" }, h("p", { class: "muted" }, "Esta miniatura no tiene título."));
+  const isTitle = kind === "title";
+  const current = () => textLayer(store.doc, kind)!;
   const selected = store.selection?.layerId === t.id ? store.selection.word : null;
   const targets = selected === null ? t.words.map((_, i) => i) : [selected];
   const editing = selected === null ? null : t.words[selected];
 
-  const change = (fn: (t: TitleLayer) => TitleLayer, options = {}) => store.commit(updateTitle(store.doc, fn), options);
+  const change = (fn: (t: TextLayer) => TextLayer, options = {}) => store.commit(updateText(store.doc, kind, fn), options);
   const changeWords = (fn: (w: Word, index: number) => Word, options = {}) =>
     change((tl) => ({ ...tl, words: tl.words.map((w, i) => (targets.includes(i) ? fn(w, i) : w)) }), options);
 
   // The words, as chips. Rebuilt in place while typing so the input keeps focus.
   const words = h("div", { class: "chips words" });
   const renderWords = () => {
-    const current = title(store.doc)!;
-    const sel = store.selection?.layerId === current.id ? store.selection.word : null;
+    const now = current();
+    const sel = store.selection?.layerId === now.id ? store.selection.word : null;
     words.replaceChildren(
       h(
         "button",
@@ -57,11 +100,11 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
           type: "button",
           class: `chip${sel === null ? " active" : ""}`,
           "aria-pressed": String(sel === null),
-          on: { click: () => store.select({ layerId: current.id, word: null }) },
+          on: { click: () => store.select({ layerId: now.id, word: null }) },
         },
         "Todas",
       ),
-      ...current.words.map((w, i) =>
+      ...now.words.map((w, i) =>
         h(
           "button",
           {
@@ -69,7 +112,7 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
             class: `chip word${sel === i ? " active" : ""}`,
             "aria-pressed": String(sel === i),
             "aria-label": w.breakBefore && i > 0 ? `${w.text}, empieza línea` : w.text,
-            on: { click: () => store.select({ layerId: current.id, word: i }) },
+            on: { click: () => store.select({ layerId: now.id, word: i }) },
           },
           h("span", { "aria-hidden": "true" }, (w.breakBefore && i > 0 ? "↵ " : "") + w.text),
         ),
@@ -79,15 +122,19 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
   renderWords();
 
   const hintText = (text: string) =>
-    isTitleDone(text) ? "El estilo de la marca ya está puesto." : "Es un ejemplo: toca y escribe el tuyo encima.";
-  const hint = h("p", { class: "muted", id: "title-sample" }, hintText(t.text));
+    !isTitle
+      ? SUBTITLE_HINT
+      : isTitleDone(text)
+        ? "El estilo de la marca ya está puesto."
+        : "Es un ejemplo: toca y escribe el tuyo encima.";
+  const hint = h("p", { class: "muted", id: `${kind}-sample` }, hintText(t.text));
   const input = h("textarea", {
-    id: "title-text",
+    id: `${kind}-text`,
     rows: 2,
     value: t.text,
     autocapitalize: "characters",
     spellcheck: false,
-    "aria-describedby": "title-sample",
+    "aria-describedby": `${kind}-sample`,
     on: {
       // The sample title is meant to be replaced: one tap selects it all, so
       // typing writes over it without deleting letter by letter.
@@ -98,11 +145,20 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
       input: (event: Event) => {
         const text = (event.target as HTMLTextAreaElement).value;
         hint.textContent = hintText(text);
+        if (!isTitle) {
+          const next = setSubtitle(store.doc, text, metrics);
+          if (!textLayer(next, kind)) {
+            // Cleared: the subtitle goes, and its controls with it.
+            store.commit(next, { key: "subtitle-text" });
+            refocus("subtitle-text");
+            return;
+          }
+        }
         // The words come from what was typed, never the other way round.
-        change((tl) => retitle(tl, text, metrics), { key: "title-text", quiet: true });
-        const current = title(store.doc)!;
-        if (store.selection?.word != null && store.selection.word >= current.words.length) {
-          store.selection = { layerId: current.id, word: null };
+        change((tl) => retitle(tl, text, metrics), { key: `${kind}-text`, quiet: true });
+        const now = current();
+        if (store.selection?.layerId === now.id && store.selection.word != null && store.selection.word >= now.words.length) {
+          store.selection = { layerId: now.id, word: null };
         }
         renderWords();
       },
@@ -121,7 +177,8 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
           "aria-pressed": String(t.preset === p.id),
           on: {
             click: () => {
-              change((tl) => applyPreset(tl, p.id));
+              // Only the title carries the accent bar.
+              change((tl) => (isTitle ? applyPreset(tl, p.id) : { ...applyPreset(tl, p.id), accent: null }));
               announce(`Estilo: ${p.label}`);
             },
           },
@@ -147,8 +204,7 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
         on: {
           click: () => {
             changeWords((w) => ({ ...w, size: clampSize(sign > 0 ? w.size * 1.12 : w.size / 1.12) }), { key: `word-size-${selected}`, quiet: true });
-            const now = title(store.doc)!;
-            const w = now.words[targets[0] ?? 0];
+            const w = current().words[targets[0] ?? 0];
             const px = `${Math.round(w?.size ?? 0)} px`;
             sizeValue.textContent = px;
             announce(editing ? `Palabra ${editing.text}: ${px}` : `Todas las palabras: ${px}`);
@@ -255,19 +311,20 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
   );
 
   const block = () => {
-    const current = title(store.doc)!;
-    const layout = layoutTitle(current.words, current.align, metrics);
+    const now = current();
+    const layout = layoutTitle(now.words, now.align, metrics);
     return { width: layout.width, height: layout.height };
   };
 
   return h(
     "div",
     { class: "panel-body" },
-    h("label", { class: "field-label", for: "title-text" }, "Título del episodio"),
+    h("label", { class: "field-label", for: `${kind}-text` }, isTitle ? "Título del episodio" : "Subtítulo"),
     input,
     hint,
-    advanced(
-      "title",
+    advancedNamed(
+      kind,
+      isTitle ? "Edición avanzada" : "Edición avanzada del subtítulo",
       h("h2", {}, "Estilo"),
       presets,
       h("h2", {}, "Palabras"),
@@ -276,6 +333,7 @@ export function titlePanel(store: Store, metrics: Metrics): HTMLElement {
       wordEditor,
       h("section", { class: "group" }, h("h2", {}, "Alineación"), align),
       h("section", { class: "group" }, h("h2", {}, "Tamaño y orden"), placementControls(store, t.id, block)),
+      // The subtitle takes the same effects as the title.
       effectsEditor(t.effects, "title", (effects, options) => change((tl) => ({ ...tl, effects }), options)),
     ),
   );
