@@ -32,6 +32,7 @@ import { describeDocument, layerName } from "./ui/describe";
 import { advanced, announce, clear, h, keepFocus, toast } from "./ui/dom";
 import { doneWords, keptFrom, reopenView, type Downloaded } from "./ui/done";
 import { historyPanel } from "./ui/history";
+import { keepTextFieldsInView } from "./ui/keyboard";
 import { improvePanel, type ImproveState } from "./ui/improve";
 import type { LibraryState } from "./ui/library";
 import { missing } from "./ui/progress";
@@ -230,6 +231,7 @@ async function main(): Promise<void> {
     html.classList.toggle("large-text", parseFloat(getComputedStyle(html).fontSize) >= 24);
     html.style.setProperty("--tabs-h", `${nav.offsetHeight}px`);
   }).observe(nav);
+  keepTextFieldsInView(() => stageWrap);
 
   // A preview render rebuilds the scene; never in the middle of a gesture.
   let touching = 0;

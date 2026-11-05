@@ -76,7 +76,8 @@ body {
   max-width: 760px;
   margin: 0 auto;
   min-height: 100dvh;
-  padding-bottom: calc(var(--tabs-h) + 8px);
+  /* While typing, room for the keyboard too, so the field can scroll above it. */
+  padding-bottom: calc(var(--tabs-h) + 8px + var(--keyboard-h, 0px));
 }
 
 .loading {
