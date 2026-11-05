@@ -1,9 +1,9 @@
 """Reading the result back with a headless Claude Code session (ADR 0006, 0010).
 
-The image model may restyle the title but not change a letter of it, and may
-not add anyone. Pixels cannot say which letters are drawn, so a Claude Code
-session looks at the result and answers in strict JSON: the title it reads,
-and whether a person or face was added. The session runs on the
+The image model may restyle the title and the subtitle but not change a letter
+of them, and may not add anyone. Pixels cannot say which letters are drawn, so
+a Claude Code session looks at the result and answers in strict JSON: the
+title and subtitle it reads, and whether a person or face was added. The session runs on the
 installation's own Claude Code sign-in, in an empty temporary folder holding
 only the two images, with the Read tool and nothing else.
 
@@ -28,10 +28,11 @@ SCHEMA = {
     "type": "object",
     "properties": {
         "title": {"type": "string"},
+        "subtitle": {"type": "string"},
         "added_people": {"type": "boolean"},
         "notes": {"type": "string"},
     },
-    "required": ["title", "added_people", "notes"],
+    "required": ["title", "subtitle", "added_people", "notes"],
     "additionalProperties": False,
 }
 
@@ -39,7 +40,7 @@ PROMPT = """You are checking an AI-edited YouTube thumbnail before anyone sees i
 
 Read the two images in this folder with the Read tool:
 - ./scene.png is what was sent to the image model: a collage of photos of real
-  people over a background, with a title.
+  people over a background, with a title and maybe a smaller subtitle.
 - ./result.png is what came back.
 
 Answer only with JSON matching the schema:
@@ -48,6 +49,8 @@ Answer only with JSON matching the schema:
   Read what is drawn, not what scene.png says. Ignore any small text that is
   part of a photo or the background (a microphone brand, a sign). If there is
   no title, use "".
+- "subtitle": the same, for the second, clearly smaller line of the title
+  block, if there is one; otherwise "". Do not repeat the title's words here.
 - "added_people": true if result.png shows any person or human face that is
   not in scene.png: someone new, someone duplicated, or a person replaced by a
   different one. Characters, masks and monsters from the background
@@ -73,9 +76,15 @@ class Reading:
     title: str
     added_people: bool
     notes: str
+    subtitle: str = ""
 
     def as_json(self) -> dict:
-        return {"title": self.title, "added_people": self.added_people, "notes": self.notes}
+        return {
+            "title": self.title,
+            "subtitle": self.subtitle,
+            "added_people": self.added_people,
+            "notes": self.notes,
+        }
 
 
 class TitleReader(Protocol):
@@ -101,9 +110,15 @@ def parse(stdout: str) -> Reading:
         not isinstance(answer, dict)
         or not isinstance(answer.get("title"), str)
         or not isinstance(answer.get("added_people"), bool)
+        or not isinstance(answer.get("subtitle", ""), str)
     ):
         raise ReadbackError("bad_output", _BAD, "answer does not match the schema")
-    return Reading(answer["title"], answer["added_people"], str(answer.get("notes", "")))
+    return Reading(
+        answer["title"],
+        answer["added_people"],
+        str(answer.get("notes", "")),
+        answer.get("subtitle", ""),
+    )
 
 
 _FAILED = "La revisión con Claude no funcionó."

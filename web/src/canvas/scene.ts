@@ -13,7 +13,8 @@ import {
   type FrameLayer,
   type LogoLayer,
   type PersonLayer,
-  type TitleLayer,
+  type TextLayer,
+  isText,
 } from "../document/types";
 import { drawCover, drawPhoto, drawWord } from "./draw";
 import { imageFor, loadImages } from "./images";
@@ -51,7 +52,8 @@ export class Scene {
   });
   private doc: DesignDocument | null = null;
   private selection: Selection = null;
-  private titleLayout: TitleLayout | null = null;
+  /** Each text layer's block, by layer id, for pinching around its centre. */
+  private textLayouts = new Map<string, TitleLayout>();
   private renderQueued = false;
   private pinch: { distance: number; scale: number; centre: { x: number; y: number } } | null = null;
 
@@ -124,7 +126,7 @@ export class Scene {
     const doc = this.doc;
     if (!doc) return;
     this.main.destroyChildren();
-    this.titleLayout = null;
+    this.textLayouts.clear();
     for (const layer of doc.layers) {
       switch (layer.kind) {
         case "background":
@@ -135,6 +137,7 @@ export class Scene {
           this.main.add(this.photo(layer));
           break;
         case "title":
+        case "subtitle":
           this.main.add(this.title(layer));
           break;
         case "frame":
@@ -230,9 +233,9 @@ export class Scene {
     return group;
   }
 
-  private title(layer: TitleLayer): Konva.Group {
+  private title(layer: TextLayer): Konva.Group {
     const layout = layoutTitle(layer.words, layer.align, this.metrics);
-    this.titleLayout = layout;
+    this.textLayouts.set(layer.id, layout);
     const group = new Konva.Group({
       id: layer.id,
       x: layer.x,
@@ -327,17 +330,18 @@ export class Scene {
     if (node.isDragging()) node.stopDrag();
     const distance = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
     const layer = this.doc.layers.find((l) => l.id === node.id());
-    if (!layer || (layer.kind !== "person" && layer.kind !== "logo" && layer.kind !== "title")) return;
+    if (!layer || (layer.kind !== "person" && layer.kind !== "logo" && !isText(layer))) return;
     if (!this.pinch) {
       const box = node.getClientRect({ relativeTo: this.stage });
       this.pinch = { distance, scale: node.scaleX(), centre: { x: box.x + box.width / 2, y: box.y + box.height / 2 } };
       return;
     }
     const scale = clampScale(layer, (this.pinch.scale * distance) / this.pinch.distance);
-    if (layer.kind === "title" && this.titleLayout) {
-      // The title's origin is its top-left corner: keep its centre still.
-      node.x(this.pinch.centre.x - (this.titleLayout.width * scale) / 2);
-      node.y(this.pinch.centre.y - (this.titleLayout.height * scale) / 2);
+    const block = isText(layer) ? this.textLayouts.get(layer.id) : undefined;
+    if (block) {
+      // Text is placed by its top-left corner: keep its centre still.
+      node.x(this.pinch.centre.x - (block.width * scale) / 2);
+      node.y(this.pinch.centre.y - (block.height * scale) / 2);
     }
     node.scale({ x: scale, y: scale });
     this.transformer.forceUpdate();
@@ -361,7 +365,7 @@ export class Scene {
    *  back to its own. Layers it lacks are transparent (an overlay of just
    *  the frame and logo has nothing under them), or `under` when given. */
   async exportDocument(doc: DesignDocument, under?: string): Promise<HTMLCanvasElement> {
-    const srcs = doc.layers.flatMap((l) => (l.kind !== "title" && l.photo ? [l.photo.src] : []));
+    const srcs = doc.layers.flatMap((l) => (!isText(l) && l.photo ? [l.photo.src] : []));
     await loadImages(srcs);
     // Read after the wait: the document may have changed meanwhile.
     const own = this.doc;

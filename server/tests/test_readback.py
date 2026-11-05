@@ -22,7 +22,8 @@ if mode == "fail":
 if mode == "garbage":
     print("hello")
     sys.exit(0)
-answer = {"title": "NADIE LO VIO", "added_people": False, "notes": "ok"}
+answer = {"title": "NADIE LO VIO", "subtitle": "CON INVITADO", "added_people": False,
+          "notes": "ok"}
 print(json.dumps({"type": "result", "is_error": False, "result": json.dumps(answer),
                   "structured_output": answer}))
 """
@@ -43,6 +44,7 @@ def test_the_reader_runs_claude_with_only_the_two_images_and_the_read_tool(fake)
     reader, record = fake
     reading = reader.read(b"scene", b"result")
     assert reading.title == "NADIE LO VIO"
+    assert reading.subtitle == "CON INVITADO"
     assert reading.added_people is False
     seen = json.loads(record.read_text())
     assert seen["files"] == ["result.png", "scene.png"]
@@ -51,6 +53,7 @@ def test_the_reader_runs_claude_with_only_the_two_images_and_the_read_tool(fake)
     assert argv[argv.index("--output-format") + 1] == "json"
     assert json.loads(argv[argv.index("--json-schema") + 1])["required"] == [
         "title",
+        "subtitle",
         "added_people",
         "notes",
     ]

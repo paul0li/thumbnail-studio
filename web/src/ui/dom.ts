@@ -110,6 +110,15 @@ const openAdvanced = new Set<string>();
 
 /** The closed-by-default home of everything the daily routine does not need. */
 export function advanced(key: string, ...children: (Node | null | false | undefined)[]): HTMLElement {
+  return advancedNamed(key, "Edición avanzada", ...children);
+}
+
+/** The same, under another name, where one panel has two of them. */
+export function advancedNamed(
+  key: string,
+  label: string,
+  ...children: (Node | null | false | undefined)[]
+): HTMLElement {
   const details = h(
     "details",
     {
@@ -122,7 +131,7 @@ export function advanced(key: string, ...children: (Node | null | false | undefi
         },
       },
     },
-    h("summary", {}, "Edición avanzada"),
+    h("summary", {}, label),
     h("div", { class: "panel-body advanced-body" }, ...children),
   );
   return details;

@@ -96,15 +96,15 @@ class FakeEngine:
 
 
 class FakeReader:
-    def __init__(self, title=TITLE, added=False, error=None):
-        self.title, self.added, self.error = title, added, error
+    def __init__(self, title=TITLE, added=False, error=None, subtitle=""):
+        self.title, self.added, self.error, self.subtitle = title, added, error, subtitle
         self.seen: list[tuple[bytes, bytes]] = []
 
     def read(self, scene_png, result_png):
         self.seen.append((scene_png, result_png))
         if self.error:
             raise self.error
-        return Reading(self.title, self.added, "fake")
+        return Reading(self.title, self.added, "fake", self.subtitle)
 
 
 class FakeDetector:
@@ -126,7 +126,7 @@ class FakeDetector:
 
 @pytest.fixture
 def setup(settings):
-    def build(engine=None, reader=None, detector=None):
+    def build(engine=None, reader=None, detector=None, subtitle=None):
         engine = engine or FakeEngine()
         reader = reader or FakeReader()
         detector = detector or FakeDetector()
@@ -138,6 +138,11 @@ def setup(settings):
         title = next(layer for layer in doc["layers"] if layer["kind"] == "title")
         title["text"] = TITLE
         title["words"] = [{**title["words"][0], "text": w} for w in TITLE.split()]
+        if subtitle:
+            words = [{**title["words"][0], "text": w, "size": 44} for w in subtitle.split()]
+            doc["layers"].append(
+                {**title, "id": "subtitle-1", "kind": "subtitle", "text": subtitle, "words": words}
+            )
         doc["layers"].insert(
             1,
             {
@@ -467,3 +472,49 @@ def test_a_newer_improvement_replaces_the_one_shown(setup):
     start(client, scene)
     second = start(client, scene).json()
     assert client.get(f"/api/thumbnails/{ID}").json()["improved"]["id"] == second["id"]
+
+
+SUBTITLE = "CON UN INVITADO"
+
+
+def test_a_subtitle_is_asked_for_word_by_word_and_checked(setup):
+    client, engine, *_, scene = setup(
+        subtitle=SUBTITLE, reader=FakeReader(subtitle="Con un\ninvitado")
+    )
+    started = start(client, scene).json()
+    assert client.get(f"/api/improvements/{started['id']}").json()["status"] == "ready"
+    assert f'"{SUBTITLE}"' in engine.calls[0]
+
+
+def test_without_a_subtitle_the_prompt_does_not_mention_one(setup):
+    client, engine, *_, scene = setup()
+    start(client, scene)
+    assert "subtitle" not in engine.calls[0].lower()
+
+
+def test_a_changed_subtitle_rejects_the_result_and_says_what_it_reads(setup):
+    client, *_, scene = setup(subtitle=SUBTITLE, reader=FakeReader(subtitle="CON UNA INVITADA"))
+    improvement = failed(client, scene)
+    assert improvement["failure"] == "subtitle_changed"
+    assert "«CON UNA INVITADA»" in improvement["reason"]
+
+
+def test_a_dropped_subtitle_rejects_the_result(setup):
+    client, *_, scene = setup(subtitle=SUBTITLE)
+    improvement = failed(client, scene)
+    assert improvement["failure"] == "subtitle_changed"
+    assert "quitó el subtítulo" in improvement["reason"]
+
+
+def test_where_the_title_ends_and_the_subtitle_starts_is_styling(setup):
+    # The reader took the subtitle's first word as the end of the title.
+    reader = FakeReader(title=f"{TITLE} CON", subtitle="UN INVITADO")
+    client, *_, scene = setup(subtitle=SUBTITLE, reader=reader)
+    started = start(client, scene).json()
+    assert client.get(f"/api/improvements/{started['id']}").json()["status"] == "ready"
+
+
+def test_text_read_as_a_subtitle_is_ignored_when_none_was_typed(setup):
+    client, *_, scene = setup(reader=FakeReader(subtitle="ALGO DEL FONDO"))
+    started = start(client, scene).json()
+    assert client.get(f"/api/improvements/{started['id']}").json()["status"] == "ready"

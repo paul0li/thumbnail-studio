@@ -3,7 +3,7 @@
 
 import { photoRef, type Photo } from "../api";
 import { newDocument, people, setFrame, setHost, setLogo } from "../document/edit";
-import type { DesignDocument } from "../document/types";
+import { isText, type DesignDocument } from "../document/types";
 
 function pickPhoto(photos: readonly Photo[], role: Photo["role"], lastId: string | undefined): Photo | undefined {
   const ofRole = photos.filter((p) => p.role === role);
@@ -16,7 +16,7 @@ function pickPhoto(photos: readonly Photo[], role: Photo["role"], lastId: string
 export function startOfDay(previous: DesignDocument | null, photos: readonly Photo[]): DesignDocument {
   const last = (kind: "frame" | "logo") => {
     const layer = previous?.layers.find((l) => l.kind === kind);
-    return layer && layer.kind !== "title" && layer.photo ? layer.photo.photoId : undefined;
+    return layer && !isText(layer) && layer.photo ? layer.photo.photoId : undefined;
   };
   let doc = newDocument();
   const frame = pickPhoto(photos, "frame", last("frame"));

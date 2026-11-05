@@ -156,10 +156,10 @@ export interface Word {
 
 export type Align = "left" | "center" | "right";
 
-/** `x`, `y` are the top-left of the title block on the canvas. */
-export interface TitleLayer {
+/** Typed text drawn word by word: the title, and the optional subtitle.
+ *  `x`, `y` are the top-left of the block on the canvas. */
+interface TextLayerFields {
   id: string;
-  kind: "title";
   /** What the host typed. The words, in order, must be exactly these. */
   text: string;
   words: Word[];
@@ -176,9 +176,26 @@ export interface TitleLayer {
   preset: string | null;
 }
 
-export type Layer = BackgroundLayer | PersonLayer | LogoLayer | FrameLayer | TitleLayer;
+export interface TitleLayer extends TextLayerFields {
+  kind: "title";
+}
+
+/** A second, smaller line of text with its own place and style. Optional;
+ *  the AI restyles it and its words are checked like the title's. */
+export interface SubtitleLayer extends TextLayerFields {
+  kind: "subtitle";
+}
+
+export type TextLayer = TitleLayer | SubtitleLayer;
+export type TextKind = TextLayer["kind"];
+
+export type Layer = BackgroundLayer | PersonLayer | LogoLayer | FrameLayer | TitleLayer | SubtitleLayer;
 export type LayerKind = Layer["kind"];
-export type MovableLayer = PersonLayer | LogoLayer | TitleLayer;
+export type MovableLayer = PersonLayer | LogoLayer | TextLayer;
+
+export function isText(layer: Layer): layer is TextLayer {
+  return layer.kind === "title" || layer.kind === "subtitle";
+}
 
 /** Layers are drawn in order: the background first, the frame (if any) last. */
 export interface DesignDocument {

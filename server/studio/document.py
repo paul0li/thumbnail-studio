@@ -3,8 +3,9 @@
 The shape is `schema/design-document.schema.json`, the same file the frontend's
 tests read. What a JSON Schema cannot say is checked here, with the same rules
 as `web/src/document/validate.ts`: the frame is the last layer, layer ids are
-unique, and the title's words are exactly what was typed. Both validators run
-against the cases in `schema/cases/`, so they cannot drift apart unnoticed.
+unique, and the words of the title and the subtitle are exactly what was
+typed. Both validators run against the cases in `schema/cases/`, so they
+cannot drift apart unnoticed.
 """
 
 import json
@@ -35,6 +36,9 @@ def _validator() -> Draft202012Validator:
 @cache
 def _whitespace() -> re.Pattern[str]:
     return re.compile(_schema()["$defs"]["whitespace"]["const"] + "+")
+
+
+TEXT_KINDS = ("title", "subtitle")
 
 
 def split_words(text: str) -> list[str]:
@@ -73,18 +77,27 @@ def validate(document: Any) -> list[str]:
         ids.add(layer["id"])
         if layer["kind"] == "frame" and i != len(layers) - 1:
             errors.append(f"layers[{i}]: the frame must be the last layer")
-        if layer["kind"] == "title" and not words_match_text(
+        if layer["kind"] in TEXT_KINDS and not words_match_text(
             [w["text"] for w in layer["words"]], layer["text"]
         ):
             errors.append(
-                f"layers[{i}].words: must be exactly the words of the typed title, in order"
+                f"layers[{i}].words: must be exactly the words of the typed text, in order"
             )
     return errors
 
 
-def title_text(document: dict) -> str:
-    """What the history shows as the thumbnail's name."""
+def _text(document: dict, kind: str) -> str:
     for layer in document["layers"]:
-        if layer["kind"] == "title":
+        if layer["kind"] == kind:
             return " ".join(split_words(layer["text"]))
     return ""
+
+
+def title_text(document: dict) -> str:
+    """What the history shows as the thumbnail's name."""
+    return _text(document, "title")
+
+
+def subtitle_text(document: dict) -> str:
+    """The optional second line, "" when there is none."""
+    return _text(document, "subtitle")
