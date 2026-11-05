@@ -40,15 +40,19 @@ PROMPT = """You are checking an AI-edited YouTube thumbnail before anyone sees i
 
 Read the two images in this folder with the Read tool:
 - ./scene.png is what was sent to the image model: a collage of photos of real
-  people over a background, with a title and maybe a smaller subtitle.
-- ./result.png is what came back.
+  people over a background, with a title and maybe a smaller subtitle. Flat
+  grey areas in it mark where the show's frame goes.
+- ./result.png is what came back, with the show's frame pasted on top: a
+  border and a banner with the show's own name, maybe a badge or a logo.
 
 Answer only with JSON matching the schema:
 - "title": the title text exactly as drawn in result.png, every word in reading
   order, separated by single spaces, letter by letter, including accents and Ñ.
-  Read what is drawn, not what scene.png says. Ignore any small text that is
-  part of a photo or the background (a microphone brand, a sign). If there is
-  no title, use "".
+  Read what is drawn, not what scene.png says. Read only letters a viewer can
+  actually see: where the frame covers part of a word, give only the visible
+  letters, and leave out words it hides completely. Ignore the frame's own
+  text (the show's name) and any small text that is part of a photo or the
+  background (a microphone brand, a sign). If there is no title, use "".
 - "subtitle": the same, for the second, clearly smaller line of the title
   block, if there is one; otherwise "". Do not repeat the title's words here.
 - "added_people": true if result.png shows any person or human face that is

@@ -2,10 +2,12 @@
 
 What goes to the engine is the scene: background, people and the title (and
 subtitle, if any) in their plain style, drawn by the browser without the frame
-and the logo. What comes back is fitted to 1280x720, gets the original faces
-put back by registration, is checked (every face restored, nobody added, the
-words of the title and subtitle exactly as typed), and only then gets the
-browser's overlay (frame and logo) pasted on top. Any failure on the way is
+and the logo, with flat grey where the frame will go (ADR 0013). The engine
+is asked to recompose it boldly. What comes back is fitted to 1280x720, gets
+the original faces put back by registration, gets the browser's overlay
+(frame and logo) pasted on top, and is checked (every face restored, nobody
+added, the words of the title and subtitle exactly as typed and not hidden by
+the frame). Any failure on the way is
 the result: there is no fallback, and nothing is shown as if it were the
 improvement (ADR 0006).
 
@@ -43,41 +45,59 @@ log = logging.getLogger("studio.improve")
 WIDTH, HEIGHT = faces.CANVAS
 _ID_PREFIX = "imp"
 
-# The instruction, in English for the model. Fixed for now; a later slice has
-# Opus write it from what it sees.
-PROMPT = """Edit this image into one coherent, cinematic YouTube thumbnail.
+# The instruction, in English for the model (ADR 0013). The host's collage is
+# a brief, not a layout: the model recomposes it boldly. Fixed for now; a later
+# slice has Opus write it from what it sees.
+PROMPT = """Edit this image into one bold, professionally designed YouTube thumbnail.
 
-The image is a rough collage: real people cut out and placed over a background
-illustration, with a title in plain white letters. Turn it into a single
-believable scene that makes someone scrolling on a phone want to click.
+The image is a rough collage made by the show's host: real people cut out and
+placed over a background, with a title in plain white letters. Treat it as a
+brief, not as a layout: it tells you WHO is in it and WHAT the title says, but
+the arrangement is a draft. Redesign the composition as a top YouTube
+thumbnail designer would, so it reads in one glance on a phone and makes
+someone want to click.
+
+Reserved areas: flat grey areas of the input (for example a band across the
+bottom with a round badge rising from it, and a thin border) are where the
+show's frame is pasted afterwards, hiding whatever is there. Keep every
+letter, every face, every hand and anything the viewer must see clear of
+them, with a margin, not even partly inside. Bodies and background may run
+behind them. Do not reproduce the grey: fill it with background or bodies.
+
+Composition, boldly:
+- Big faces: crop tight (head and shoulders) and make the faces clearly
+  bigger than in the collage, up to about twice, with the most newsworthy
+  person largest. Let the people fill their side and overlap slightly, so
+  they read as one scene and not as separate photos.
+- Put the text in one block in the open area, as large as it can be while
+  staying off the faces and out of the reserved areas.
+- At most three things to look at: the people, the text block, and one
+  visual cue of the story in the background.
 
 People:
 - Keep exactly the same people. Keep every face recognisable and unchanged:
   same identity, same expression, same glasses and hair. Do not beautify,
-  age or restyle faces.
-- Where a body is cut off by the edge of a cutout, complete it naturally.
-- Unify the lighting on everyone so they belong in the same scene, with a
-  strong rim light separating them from the background.
+  age, restyle, turn or redraw faces.
+- You may move, resize and reorder the people and crop them tighter.
+  Complete bodies naturally where needed.
+- Unify the lighting on everyone, with a strong rim light separating them
+  from the background.
 - Add no people and no faces, and do not remove anyone, even someone who is
   only partly visible. Do not duplicate anyone.
 
 Background:
-- Keep the background's subject and its vivid, saturated colours. Do not
-  darken it, dim it or wash it out, and add no dark vignette.
-- Make the people stand out through contrast instead: simplify the
-  background's detail behind them, soften its focus a little, and let the
-  rim light separate them from it. Keep its characters as they are; do not
-  turn any of them into a real person.
+- Keep it vivid, saturated and on topic. Do not darken it or wash it out,
+  and add no dark vignette.
+- Keep it simple behind the people, with the contrast that makes them stand
+  out. Keep its characters as they are; do not turn any of them into a real
+  person.
 
 Title:
-- Restyle the title so it stands out, and place it where it reads best
-  without covering faces.
+- Make the title one compact block with a clear hierarchy: the one or two
+  words that carry the story clearly bigger, short words (articles,
+  prepositions, conjunctions) small.
 - Keep clear space between the text and every head: no letter may touch or
-  overlap a face or hair. If they do not fit, make the text or the people a
-  little smaller rather than overlapping them.
-- Play with the sizes of its words: make the one or two words that carry the
-  story clearly bigger, and keep short words (articles, prepositions,
-  conjunctions) small.
+  overlap a face or hair.
 - Lettering style, strictly: flat letters in a heavy condensed sans serif,
   with ONE solid colour fill per word (white, yellow or red), a clean solid
   dark outline and a soft drop shadow. No texture, no grain, no gradient
@@ -90,9 +110,9 @@ Framing: keep the 16:9 landscape framing of the input.
 """
 
 # Only when the host typed a subtitle; it goes inside the title's rules.
-SUBTITLE_RULES = """- Under the title there is a second, smaller line: the subtitle. Restyle it
-  in the same lettering as the title, clearly smaller than the title, and keep
-  it near the title, readable and without covering faces.
+SUBTITLE_RULES = """- There is a second, smaller line: the subtitle. Restyle it in the same
+  lettering, clearly smaller than the title, as a kicker attached to the
+  title's block, readable and without covering faces.
 - Keep the subtitle's words exactly, letter by letter, in the same order,
   including accents and Ñ: "{subtitle}".
 """
@@ -143,6 +163,24 @@ def _png(image: Image.Image) -> bytes:
     out = io.BytesIO()
     image.save(out, "PNG")
     return out.getvalue()
+
+
+# Where the overlay is at least this opaque (of 255), the scene sent is grey:
+# the frame will hide it, and the model sees exactly where (ADR 0013).
+RESERVED_ALPHA = 16
+RESERVED_GREY = (128, 128, 128)
+
+
+def reserve(scene: Image.Image, overlay: Image.Image | None) -> Image.Image:
+    """The scene as sent to the engine: flat grey wherever the overlay (frame
+    and logo) will cover it, so nothing the viewer must see is put there."""
+    scene = scene.convert("RGB")
+    if overlay is None:
+        return scene
+    alpha = np.asarray(overlay.convert("RGBA").resize((WIDTH, HEIGHT)))[..., 3]
+    pixels = np.asarray(scene).copy()
+    pixels[alpha > RESERVED_ALPHA] = RESERVED_GREY
+    return Image.fromarray(pixels)
 
 
 def compose(restored: Image.Image, overlay: Image.Image | None) -> Image.Image:
@@ -461,7 +499,10 @@ class Pipeline:
         if row["overlay_path"]:
             with Image.open(self.settings.media_dir / row["overlay_path"]) as image:
                 overlay = image.convert("RGBA")
-        scene_png = (self.settings.media_dir / row["scene_path"]).read_bytes()
+        # What the engine sees: the scene, grey where the frame will be.
+        scene_image = reserve(scene_image, overlay)
+        scene_png = _png(scene_image)
+        report["sent_scene"] = self._store(scene_png)
         title = document.title_text(doc)
         subtitle = document.subtitle_text(doc)
 
@@ -512,8 +553,11 @@ class Pipeline:
                 f"{len(extra)} faces",
             )
 
+        # The text is read with the frame on: a word the frame hides is a word
+        # the viewer does not see.
+        final_png = _png(compose(restored_image, overlay))
         try:
-            reading = self.reader.read(scene_png, restored_png)
+            reading = self.reader.read(scene_png, final_png)
         except ReadbackError as exc:
             raise Failure(f"readback_{exc.code}", exc.reason, exc.detail) from None
         report["reading"] = reading.as_json()
@@ -526,7 +570,7 @@ class Pipeline:
         _check_text(reading, title, subtitle)
 
         _update(self.db, improvement_id, stage="frame")
-        final_path = self._store(_png(compose(restored_image, overlay)))
+        final_path = self._store(final_png)
         _update(
             self.db,
             improvement_id,

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
-from studio import faces
+from studio import faces, improve
 from studio.app import create_app
 from studio.engine import EngineError, EngineResult
 from studio.readback import ReadbackError, Reading
@@ -85,6 +85,7 @@ class FakeEngine:
         self.respond = respond or (lambda scene: EngineResult(moved(scene), {"engine": "fake"}))
         self._configured = configured
         self.calls: list[str] = []
+        self.scenes: list[bytes] = []
 
     @property
     def configured(self):
@@ -92,6 +93,7 @@ class FakeEngine:
 
     def edit(self, scene_png, prompt):
         self.calls.append(prompt)
+        self.scenes.append(scene_png)
         return self.respond(scene_png)
 
 
@@ -189,14 +191,18 @@ def test_an_improvement_restores_the_face_checks_and_puts_the_frame_on_top(setup
     assert improvement["status"] == "ready", improvement
     assert improvement["version"] == 1
 
-    # The prompt asks for the title's exact words; the reader saw the scene
-    # that was sent and the restored result, never the frame.
+    # The prompt asks for the title's exact words. The engine got the scene
+    # with flat grey where the frame goes, and nothing of the frame itself;
+    # the reader saw that same scene and the result with the frame on.
     assert f'"{TITLE}"' in engine.calls[0]
+    with Image.open(io.BytesIO(engine.scenes[0])) as sent, Image.open(io.BytesIO(scene)) as drawn:
+        assert sent.getpixel((640, 700))[:3] == improve.RESERVED_GREY
+        assert sent.getpixel((640, 300)) == drawn.convert("RGB").getpixel((640, 300))
     sent, read = reader.seen[0]
-    assert sent == scene
-    with Image.open(io.BytesIO(read)) as restored:
-        assert restored.size == (1280, 720)
-        assert restored.getpixel((640, 700))[:3] != (233, 40, 39)
+    assert sent == engine.scenes[0]
+    with Image.open(io.BytesIO(read)) as final:
+        assert final.size == (1280, 720)
+        assert final.getpixel((640, 700))[:3] == (233, 40, 39)
 
     final = picture(client, improvement["final_url"])
     assert final.size == (1280, 720)
@@ -209,6 +215,13 @@ def test_an_improvement_restores_the_face_checks_and_puts_the_frame_on_top(setup
     (restored,) = report["restored"]
     assert restored["scale"] == pytest.approx(1.06, abs=0.02)
     assert restored["in_result"] != restored["box"]
+
+
+def test_without_a_frame_the_scene_goes_as_drawn(setup):
+    client, engine, *_, scene = setup()
+    start(client, scene, overlay=False)
+    with Image.open(io.BytesIO(engine.scenes[0])) as sent, Image.open(io.BytesIO(scene)) as drawn:
+        assert sent.convert("RGB").tobytes() == drawn.convert("RGB").tobytes()
 
 
 def sqlite_row(settings, improvement_id):
