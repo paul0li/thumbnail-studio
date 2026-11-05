@@ -363,8 +363,8 @@ export class Scene {
 
   /** Any document drawn by this same scene at 1280x720, then the scene goes
    *  back to its own. Layers it lacks are transparent (an overlay of just
-   *  the frame and logo has nothing under them). */
-  async exportDocument(doc: DesignDocument): Promise<HTMLCanvasElement> {
+   *  the frame and logo has nothing under them), or `under` when given. */
+  async exportDocument(doc: DesignDocument, under?: string): Promise<HTMLCanvasElement> {
     const srcs = doc.layers.flatMap((l) => (!isText(l) && l.photo ? [l.photo.src] : []));
     await loadImages(srcs);
     // Read after the wait: the document may have changed meanwhile.
@@ -378,7 +378,12 @@ export class Scene {
       const out = document.createElement("canvas");
       out.width = CANVAS_WIDTH;
       out.height = CANVAS_HEIGHT;
-      out.getContext("2d")!.drawImage(rendered, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      const ctx = out.getContext("2d")!;
+      if (under) {
+        ctx.fillStyle = under;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+      ctx.drawImage(rendered, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       return out;
     } finally {
       this.doc = own;

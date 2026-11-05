@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { engineScene, overlayLayers, plainTitle } from "./improve";
-import { addPerson, newDocument, setFrame, setLogo, title, updateTitle } from "./edit";
+import { addPerson, newDocument, setBackgroundPhoto, setFrame, setLogo, title, updateTitle } from "./edit";
 import { applyPreset } from "./presets";
 import { retitle } from "./title";
 import { mono } from "./testing";
@@ -27,9 +27,13 @@ function styled() {
 
 describe("what «Mejorar» sends", () => {
   it("the scene has no frame and no logo; the overlay has only them", () => {
-    const doc = styled();
+    const doc = setBackgroundPhoto(styled(), photo("bg"));
     expect(engineScene(doc, mono).layers.map((l) => l.kind)).toEqual(["background", "person", "title"]);
     expect(overlayLayers(doc).map((l) => l.kind)).toEqual(["logo", "frame"]);
+  });
+
+  it("without a background photo the scene goes without its gradient, to be drawn over white", () => {
+    expect(engineScene(styled(), mono).layers.map((l) => l.kind)).toEqual(["person", "title"]);
   });
 
   it("the title goes in the plain brand style, every word alike, same words and place", () => {
