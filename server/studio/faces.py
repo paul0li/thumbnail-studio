@@ -6,7 +6,10 @@ face at its old place would show it twice. Each face is registered instead:
 features inside the face in the scene that went to the model are matched
 against the result, a similarity transform (move, scale, a little rotation) is
 fitted with RANSAC, and the original face is warped by it, its colour matched
-to the result's light, and pasted inside a feathered ellipse.
+to the result's light, and pasted inside a feathered ellipse. The core of the
+face is always pasted; around it (hair, the top of the forehead) the original
+goes only where the result still shows roughly the same thing, so a title the
+model drew over the hair stays in front of it.
 
 What is pasted comes from the person's own layer, never from the composed
 scene: the scene has the plain title and whatever else sits around a head,
@@ -59,6 +62,13 @@ SCALE_RANGE = (0.6, 1.6)
 # drew there (correlation of gradients inside the face).
 MIN_AGREEMENT = 0.35
 COLOUR_STRENGTH = 0.8
+# Around the core of a face, a pixel of the result whose colour is this far
+# (Lab, 8-bit scale) from the original's shows something else, such as a
+# letter, and is kept. Hair redrawn by the model stays well under it.
+OTHER_DISTANCE = 45.0
+# How far around such a pixel the result is also kept, as a share of the face
+# height: enough to keep the dark outline of the letters.
+OTHER_GROW = 0.06
 
 
 @dataclass(frozen=True)
@@ -354,6 +364,41 @@ def _restore_region(face: SceneFace) -> Box:
     return face.box.grow(0.18, 0.45, 0.18, 0.06)
 
 
+def _core_region(face: SceneFace) -> Box:
+    """The part of a face that is always pasted, whatever the model drew over
+    it: the detector's box with a little of the forehead."""
+    return face.box.grow(0.06, 0.12, 0.06, 0.04)
+
+
+def _pasteable(
+    original: np.ndarray,
+    result: np.ndarray,
+    face: SceneFace,
+    reg: Registration,
+    feather: float,
+) -> np.ndarray:
+    """Where the original may be pasted: the core of the face always; around
+    it (the hair, the top of the forehead), only where the result still shows
+    roughly the same thing. Where the model drew something else there, such as
+    the title it moved down onto the hair, the result is kept, so the text
+    stays in front of the head instead of turning see-through."""
+    height, width = result.shape[:2]
+    core = cv2.warpAffine(
+        _ellipse(_core_region(face), (height, width)), reg.matrix, (width, height)
+    )
+    core = cv2.GaussianBlur(core, (0, 0), max(1.0, feather / 2))
+    smooth = max(1.0, 0.01 * face.box.height * reg.scale)
+    a = cv2.cvtColor(cv2.GaussianBlur(original, (0, 0), smooth), cv2.COLOR_BGR2LAB)
+    b = cv2.cvtColor(cv2.GaussianBlur(result, (0, 0), smooth), cv2.COLOR_BGR2LAB)
+    distance = np.linalg.norm(a.astype(np.float32) - b.astype(np.float32), axis=2)
+    other = (distance > OTHER_DISTANCE).astype(np.uint8)
+    # Take in the dark outline around letters, which is close to dark hair.
+    grow = max(1, round(OTHER_GROW * face.box.height * reg.scale))
+    other = cv2.dilate(other, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * grow + 1,) * 2))
+    other = cv2.GaussianBlur(other.astype(np.float32), (0, 0), max(1.0, grow / 2))
+    return np.maximum(core, 1 - other)
+
+
 def _feature_region(face: SceneFace) -> Box:
     """Where features are looked for: the face and its surroundings (hair,
     glasses, collar), which register more robustly than skin alone."""
@@ -495,6 +540,7 @@ def restore(
         # The cutout's own edge is the feather where the ellipse goes past it.
         mask = mask * cv2.warpAffine(shows, reg.matrix, (width, height), flags=cv2.INTER_LINEAR)
         original = _match_colour(original, result, mask)
+        mask = mask * _pasteable(original, result, face, reg, feather)
         out = out * (1 - mask[..., None]) + original.astype(np.float32) * mask[..., None]
     return Restored(np.clip(out, 0, 255).astype(np.uint8), registrations)
 

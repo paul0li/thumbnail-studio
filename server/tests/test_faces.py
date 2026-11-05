@@ -132,6 +132,27 @@ def test_what_sits_over_the_head_in_the_scene_is_not_pasted_back():
     assert np.array_equal(restored.image[above], result[above])
 
 
+def test_text_the_engine_drew_over_the_hair_stays_in_front():
+    scene = texture((1280, 720), seed=5)
+    result = shifted(scene, 40, -20, 1.08)
+    # The face went to about (580, 250)-(731, 433). The engine smeared it and
+    # drew a yellow word with a dark outline over the hair, above the brows.
+    face = (slice(250, 450), slice(560, 720))
+    result[face] = cv2.GaussianBlur(result[face], (0, 0), 6)
+    word = (slice(160, 205), slice(540, 770))
+    result[word] = (20, 20, 20)
+    result[165:200, 545:765] = (0, 210, 250)
+    restored = faces.restore(bgr(scene), result, [FACE], whole(scene))
+    assert restored.registrations
+    # The word and its outline are left as the engine drew them (to within the
+    # last trace of the feather)...
+    assert np.abs(restored.image[word].astype(int) - result[word]).max() <= 3
+    # ...and the face's detail is back all the same.
+    inner = (slice(300, 400), slice(600, 680))
+    sharpness = [cv2.Laplacian(img[inner], cv2.CV_64F).var() for img in (result, restored.image)]
+    assert sharpness[1] > 5 * sharpness[0]
+
+
 def test_hidden_faces_are_not_registered():
     scene = texture((1280, 720), seed=5)
     other = bgr(texture((1280, 720), seed=6))
