@@ -44,7 +44,7 @@ export interface Step {
 export const STEPS: readonly Step[] = [
   { id: "host", label: "Conductor", question: "¿Quién conduce hoy?" },
   { id: "guests", label: "Invitados", question: "¿Quién viene hoy?", optional: true },
-  { id: "background", label: "Fondo", question: "¿Qué fondo va hoy?" },
+  { id: "background", label: "Fondo", question: "¿Qué fondo va hoy?", optional: true },
   { id: "title", label: "Título", question: "¿Cómo se llama el episodio?" },
 ];
 
@@ -194,7 +194,7 @@ function backgroundStep(c: StepContext): HTMLElement[] {
       c.refresh,
     );
   return [
-    h("p", { class: "muted" }, "Toca una foto. Se ve detrás de todo."),
+    h("p", { class: "muted" }, "Toca una foto. Se ve detrás de todo. Si no eliges ninguna, la IA recibe un fondo blanco."),
     uploadButton(c.library, "background", c.rerender, c.refresh),
     advanced(
       "background",
