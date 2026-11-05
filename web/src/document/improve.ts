@@ -25,12 +25,18 @@ export function plainTitle(title: TitleLayer, metrics: Metrics): TitleLayer {
   };
 }
 
+/** What the engine gets under the scene where there is no background photo. */
+export const ENGINE_BLANK = "#ffffff";
+
 /** The document the engine sees: everything but the frame and the logo, with
- *  a plain title. */
+ *  a plain title. A background without a photo is left out too, so the
+ *  engine gets plain white (`ENGINE_BLANK`) instead of the editor's gradient. */
 export function engineScene(doc: DesignDocument, metrics: Metrics): DesignDocument {
   return {
     ...doc,
-    layers: doc.layers.filter((l) => !isOverlay(l)).map((l) => (l.kind === "title" ? plainTitle(l, metrics) : l)),
+    layers: doc.layers
+      .filter((l) => !isOverlay(l) && !(l.kind === "background" && l.photo === null))
+      .map((l) => (l.kind === "title" ? plainTitle(l, metrics) : l)),
   };
 }
 

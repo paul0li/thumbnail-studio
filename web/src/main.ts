@@ -22,7 +22,7 @@ import {
 import { loadFont } from "./canvas/fonts";
 import { Scene } from "./canvas/scene";
 import { findLayer, people } from "./document/edit";
-import { engineScene, overlayLayers } from "./document/improve";
+import { ENGINE_BLANK, engineScene, overlayLayers } from "./document/improve";
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type DesignDocument } from "./document/types";
 import { validateDocument, type ValidationResult } from "./document/validate";
 import { fromServer, reconcile, type Start } from "./open";
@@ -440,7 +440,7 @@ async function main(): Promise<void> {
     }
     try {
       const doc = store.doc;
-      const sceneBlob = await pngBlob(await scene.exportDocument(engineScene(doc, metrics)));
+      const sceneBlob = await pngBlob(await scene.exportDocument(engineScene(doc, metrics), ENGINE_BLANK));
       const overlay = overlayLayers(doc);
       const overlayBlob = overlay.length ? await pngBlob(await scene.exportDocument({ ...doc, layers: overlay })) : null;
       track(await startImprovement(store.id, version, sceneBlob, overlayBlob));
