@@ -72,6 +72,9 @@ Background:
 Title:
 - Restyle the title so it stands out, and place it where it reads best
   without covering faces.
+- Keep clear space between the text and every head: no letter may touch or
+  overlap a face or hair. If they do not fit, make the text or the people a
+  little smaller rather than overlapping them.
 - Play with the sizes of its words: make the one or two words that carry the
   story clearly bigger, and keep short words (articles, prepositions,
   conjunctions) small.
