@@ -65,6 +65,22 @@ Everything in the repository is in **English**: code, identifiers, comments,
 docs, ADRs, commit messages, branch names and pull requests. The one exception
 is text the user reads in the app, which is in **Spanish**.
 
+### Worktrees
+
+Start every piece of work in its own git worktree, never in the main checkout.
+The main checkout stays on `main`, clean and up to date: it may be what a
+running installation serves from, and other sessions branch from it.
+
+```
+git fetch
+git worktree add -b feat/short-description .claude/worktrees/short-description origin/main
+```
+
+Work, test and commit inside the worktree, open the pull request from its
+branch, and remove the worktree (`git worktree remove <path>`) once the branch
+is merged. After a merge, bring the main checkout forward with
+`git pull --ff-only` on `main`.
+
 ### Branches
 
 Never commit to `main` directly. Branch names are `<type>/<short-kebab-description>`,
