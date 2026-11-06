@@ -42,12 +42,19 @@ export function defaultWord(text: string, size: number = DEFAULT_WORD_SIZE): Wor
   };
 }
 
+/** The episode's title is always in capitals, however it is typed; the
+ *  subtitle keeps the case it was typed in. */
+export function caseFor(kind: TextKind, text: string): string {
+  return kind === "title" ? text.toLocaleUpperCase("es") : text;
+}
+
 /**
- * The title after the host retypes it. A word keeps the style of the word that
+ * The title after the host retypes it, in capitals if it is the title. A word keeps the style of the word that
  * was in its place; new words at the end take the style of the last one.
  * With `autoBreaks` on, lines are rewrapped; otherwise the breaks stay by position.
  */
-export function retitle<T extends TextLayer>(title: T, text: string, metrics: Metrics | null): T {
+export function retitle<T extends TextLayer>(title: T, typedText: string, metrics: Metrics | null): T {
+  const text = caseFor(title.kind, typedText);
   const typed = splitWords(text);
   const last = title.words[title.words.length - 1];
   let words: Word[] = typed.map((w, i) => {

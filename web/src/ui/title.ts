@@ -4,7 +4,7 @@
 import { SAMPLE_TITLE, setSubtitle, textLayer, updateText } from "../document/edit";
 import { layoutTitle, type Metrics } from "../document/layout";
 import { applyPreset, PRESETS } from "../document/presets";
-import { clampSize, retitle } from "../document/title";
+import { caseFor, clampSize, retitle } from "../document/title";
 import { BRAND, type Align, type Fill, type TextKind, type TextLayer, type Word } from "../document/types";
 import type { Store } from "../store";
 import { advancedNamed, announce, h } from "./dom";
@@ -65,6 +65,16 @@ function newSubtitleField(store: Store, metrics: Metrics): HTMLElement {
     input,
     h("p", { class: "muted", id: "subtitle-sample" }, SUBTITLE_HINT),
   );
+}
+
+/** The title field shows what the title will be: capitals, with the caret
+ *  left where it was. */
+function showInCapitals(el: HTMLTextAreaElement): void {
+  const upper = caseFor("title", el.value);
+  if (upper === el.value) return;
+  const { selectionStart, selectionEnd } = el;
+  el.value = upper;
+  el.setSelectionRange(selectionStart, selectionEnd);
 }
 
 function refocus(id: string): void {
@@ -143,7 +153,9 @@ export function titlePanel(store: Store, metrics: Metrics, kind: TextKind = "tit
         if (el.value === SAMPLE_TITLE) el.select();
       },
       input: (event: Event) => {
-        const text = (event.target as HTMLTextAreaElement).value;
+        const el = event.target as HTMLTextAreaElement;
+        if (isTitle) showInCapitals(el);
+        const text = el.value;
         hint.textContent = hintText(text);
         if (!isTitle) {
           const next = setSubtitle(store.doc, text, metrics);
