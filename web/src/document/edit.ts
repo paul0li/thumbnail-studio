@@ -3,7 +3,7 @@
 
 import { accentRule, autoBreaks, layoutTitle, type Metrics } from "./layout";
 import { brandStyle } from "./presets";
-import { AUTO_WRAP_WIDTH, defaultWord, retitle, splitWords, SUBTITLE_WORD_SIZE } from "./title";
+import { AUTO_WRAP_WIDTH, caseFor, defaultWord, retitle, splitWords, SUBTITLE_WORD_SIZE } from "./title";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -43,7 +43,8 @@ export function newId(prefix: string): string {
  *  types theirs. */
 export const SAMPLE_TITLE = "ESCRIBE EL TÍTULO";
 
-export function newDocument(title = SAMPLE_TITLE): DesignDocument {
+export function newDocument(typedTitle = SAMPLE_TITLE): DesignDocument {
+  const title = caseFor("title", typedTitle);
   const titleLayer: TitleLayer = {
     id: newId("title"),
     kind: "title",

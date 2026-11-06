@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newDocument, title } from "./edit";
+import { newDocument, setSubtitle, subtitle, title } from "./edit";
 import { mono } from "./testing";
 import { retitle, splitWords, wordsMatchText } from "./title";
 
@@ -19,15 +19,25 @@ describe("wordsMatchText", () => {
 });
 
 describe("retitle", () => {
-  it("keeps each word's style by position and keeps the typed casing", () => {
+  it("keeps each word's style by position and puts the title in capitals", () => {
     const t = title(newDocument("UNO DOS"))!;
     const styled = { ...t, autoBreaks: false, words: [t.words[0]!, { ...t.words[1]!, size: 200, box: { color: "#FFD400" } }] };
-    const next = retitle(styled, "Uno Dos Tres", mono);
-    expect(next.words.map((w) => w.text)).toEqual(["Uno", "Dos", "Tres"]);
+    const next = retitle(styled, "Uno Dos Tres ñandú", mono);
+    expect(next.text).toBe("UNO DOS TRES ÑANDÚ");
+    expect(next.words.map((w) => w.text)).toEqual(["UNO", "DOS", "TRES", "ÑANDÚ"]);
     expect(next.words[1]!.size).toBe(200);
     // A new word continues the style of the last one.
     expect(next.words[2]!.box).toEqual({ color: "#FFD400" });
     expect(wordsMatchText(next.words.map((w) => w.text), next.text)).toBe(true);
+  });
+
+  it("starts a new thumbnail's title in capitals too", () => {
+    expect(title(newDocument("nadie lo vio"))!.text).toBe("NADIE LO VIO");
+  });
+
+  it("leaves the subtitle in the case it was typed", () => {
+    const doc = setSubtitle(newDocument(), "Con un invitado", mono);
+    expect(subtitle(doc)!.words.map((w) => w.text)).toEqual(["Con", "un", "invitado"]);
   });
 
   it("rewraps lines while breaks are automatic, and leaves them once set by hand", () => {
