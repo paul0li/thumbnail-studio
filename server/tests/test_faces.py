@@ -153,6 +153,33 @@ def test_text_the_engine_drew_over_the_hair_stays_in_front():
     assert sharpness[1] > 5 * sharpness[0]
 
 
+def test_a_face_the_engine_enlarged_is_restored_from_the_full_photo():
+    # The photo is three times the size it is drawn at; the engine doubled
+    # the person. Pasting from the canvas copy would be blurred.
+    photo = texture((960, 960), seed=5)
+    person = placement(photo, scale=1 / 3)
+    scene = Image.new("RGB", (1280, 720), (90, 90, 90))
+    canvas, alpha = person.on_canvas()
+    scene = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB) * alpha[..., None] + np.asarray(scene) * (
+        1 - alpha[..., None]
+    )
+    scene = Image.fromarray(scene.astype(np.uint8))
+    face = faces.SceneFace("p", faces.Box(580, 300, 700, 420), 1.0)
+    result = shifted(scene, -640, -360, 2.0)
+    restored = faces.restore(bgr(scene), result, [face], [person])
+    (reg,) = restored.registrations
+    assert reg.scale == pytest.approx(2.0, abs=0.02)
+    inner = (slice(300, 420), slice(580, 700))
+    # What the full photo looks like drawn at that size, for reference.
+    sharp = cv2.resize(bgr(photo), (640, 640), interpolation=cv2.INTER_AREA)[140:260, 260:380]
+    detail = [
+        cv2.Laplacian(img, cv2.CV_64F).var()
+        for img in (result[inner], restored.image[inner], sharp)
+    ]
+    assert detail[1] > 3 * detail[0]
+    assert detail[1] > 0.5 * detail[2]
+
+
 def test_hidden_faces_are_not_registered():
     scene = texture((1280, 720), seed=5)
     other = bgr(texture((1280, 720), seed=6))

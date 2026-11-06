@@ -11,8 +11,8 @@ face is always pasted; around it (hair, the top of the forehead) the original
 goes only where the result still shows roughly the same thing, so a title the
 model drew over the hair stays in front of it.
 
-What is pasted comes from the person's own layer, never from the composed
-scene: the scene has the plain title and whatever else sits around a head,
+What is pasted comes from the person's own photo, at its full resolution,
+never from the composed scene: the scene has the plain title and whatever else sits around a head,
 and the model usually moves those. Pasting the scene's pixels would leave a
 faded copy of the old title over the new one.
 
@@ -52,12 +52,13 @@ MIN_VISIBLE = 0.6
 CUTOUT_SCORE = 0.7
 
 # Registration: what "confidently" means. Measured on real engine outputs,
-# where good registrations have dozens of inliers and a moved face is never
-# scaled by more than about 15 %.
+# where good registrations have dozens of inliers. Asked to recompose boldly
+# (ADR 0013), the model enlarges faces up to about 2.2 times; the original is
+# then drawn from the photo's full resolution.
 MIN_MATCHES = 12
 MIN_INLIERS = 10
 MIN_INLIER_RATIO = 0.3
-SCALE_RANGE = (0.6, 1.6)
+SCALE_RANGE = (0.6, 2.6)
 # Structural agreement between the warped original face and what the model
 # drew there (correlation of gradients inside the face).
 MIN_AGREEMENT = 0.35
@@ -231,6 +232,24 @@ class Placement:
         bgr = cv2.cvtColor(np.ascontiguousarray(pixels[..., :3]), cv2.COLOR_RGB2BGR)
         return bgr, pixels[..., 3].astype(np.float32) / 255
 
+    def photo_matrix(self) -> np.ndarray:
+        """2x3: the photo's own pixels to the canvas, as `to_canvas`."""
+        sx = self.scale * self.width / self.image.width
+        sy = self.scale * self.height / self.image.height
+        if self.flip_x:
+            return np.float64(
+                [
+                    [-sx, 0, self.x + self.scale * self.width / 2],
+                    [0, sy, self.y - self.scale * self.height / 2],
+                ]
+            )
+        return np.float64(
+            [
+                [sx, 0, self.x - self.scale * self.width / 2],
+                [0, sy, self.y - self.scale * self.height / 2],
+            ]
+        )
+
     def alpha_on_canvas(self) -> np.ndarray:
         """This layer's coverage of the canvas, 0..1."""
         return self.on_canvas()[1]
@@ -366,8 +385,11 @@ def _restore_region(face: SceneFace) -> Box:
 
 def _core_region(face: SceneFace) -> Box:
     """The part of a face that is always pasted, whatever the model drew over
-    it: the detector's box with a little of the forehead."""
-    return face.box.grow(0.06, 0.12, 0.06, 0.04)
+    it: eyes, nose and mouth, inside the detector's box. The rest (forehead,
+    hair, the cheeks' edge) is pasted only where the result still shows the
+    face, so letters over the forehead stay, and so does the model's
+    background where the face it drew is a little narrower or wider."""
+    return face.box.grow(-0.08, -0.1, -0.08, 0.0)
 
 
 def _pasteable(
@@ -508,6 +530,32 @@ def register(
     return Registration(face, matrix, len(pairs), count, agreement)
 
 
+def _then(second: np.ndarray, first: np.ndarray) -> np.ndarray:
+    """2x3 affine `first`, then `second`."""
+    a = np.vstack([first, [0, 0, 1]])
+    b = np.vstack([second, [0, 0, 1]])
+    return (b @ a)[:2]
+
+
+def _warp_photo(person: Placement, matrix: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """The person's own photo, at its full resolution, warped straight onto
+    the result by the canvas placement and then `matrix`. A face the model
+    enlarged is drawn from the photo's real detail, not from the smaller copy
+    on the canvas. Shrinking is done by area first, which a warp does not."""
+    total = _then(matrix, person.photo_matrix())
+    rgb = np.asarray(person.image.convert("RGB"))
+    factor = float(np.sqrt(abs(np.linalg.det(total[:, :2]))))
+    if factor < 1:
+        w = max(1, round(rgb.shape[1] * factor))
+        h = max(1, round(rgb.shape[0] * factor))
+        rgb = cv2.resize(rgb, (w, h), interpolation=cv2.INTER_AREA)
+        # A pixel of the smaller copy, back in the photo's own pixels.
+        to_photo = np.float64([[person.image.width / w, 0, 0], [0, person.image.height / h, 0]])
+        total = _then(total, to_photo)
+    bgr = cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2BGR)
+    return cv2.warpAffine(bgr, total, size, flags=cv2.INTER_LANCZOS4)
+
+
 def restore(
     scene: np.ndarray,
     result: np.ndarray,
@@ -522,6 +570,7 @@ def restore(
         raise ValueError("scene and result must be the same size")
     height, width = scene.shape[:2]
     layers = visible_layers(people)
+    by_id = {p.layer_id: p for p in people}
     sift = cv2.SIFT_create(4000)
     result_features = sift.detectAndCompute(cv2.cvtColor(result, cv2.COLOR_BGR2GRAY), None)
     out = result.astype(np.float32)
@@ -531,8 +580,8 @@ def restore(
             continue
         reg = register(scene, result, face, result_features)
         registrations.append(reg)
-        pixels, shows = layers[face.layer_id]
-        original = cv2.warpAffine(pixels, reg.matrix, (width, height), flags=cv2.INTER_LANCZOS4)
+        _, shows = layers[face.layer_id]
+        original = _warp_photo(by_id[face.layer_id], reg.matrix, (width, height))
         region = _restore_region(face)
         mask = cv2.warpAffine(_ellipse(region, (height, width)), reg.matrix, (width, height))
         feather = max(2.0, 0.08 * region.height * reg.scale)

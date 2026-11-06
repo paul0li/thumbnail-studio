@@ -1,6 +1,6 @@
 # 0010 — «Mejorar» sends the scene, restores faces by registration, checks, and pastes the frame last
 
-**Status:** Accepted · 2026-10-28 · Supersedes in part 0002
+**Status:** Accepted · 2026-10-28 · Supersedes in part 0002 · Superseded in part by 0013 (the model recomposes boldly; the frame's area is sent grey; faces come from the full photo; text is read with the frame on)
 
 ## Context
 
