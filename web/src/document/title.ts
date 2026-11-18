@@ -1,7 +1,7 @@
 // The title is made of the words the host typed, and nothing else.
 
-import { autoBreaks, type Metrics } from "./layout";
-import { BRAND, type TextKind, type TextLayer, type Word } from "./types";
+import { autoBreaks, layoutTitle, type Metrics } from "./layout";
+import { BRAND, CANVAS_WIDTH, type TextKind, type TextLayer, type Word } from "./types";
 
 export const DEFAULT_WORD_SIZE = 80;
 /** The subtitle starts at about half the title's size. */
@@ -64,7 +64,25 @@ export function retitle<T extends TextLayer>(title: T, typedText: string, metric
     return defaultWord(w, defaultSize(title.kind));
   });
   if (title.autoBreaks && metrics) words = autoBreaks(words, AUTO_WRAP_WIDTH, metrics);
-  return { ...title, text, words };
+  const changed = { ...title, text, words };
+  return metrics ? keepCentred(title, changed, metrics) : changed;
+}
+
+/** The block centred on the canvas: its left edge follows its width. */
+export function centred<T extends TextLayer>(text: T, metrics: Metrics): T {
+  const { width } = layoutTitle(text.words, text.align, metrics);
+  return { ...text, x: Math.round((CANVAS_WIDTH - width * text.scale) / 2) };
+}
+
+/** Whether a centre-aligned block sits centred on the canvas. */
+export function isCentred(text: TextLayer, metrics: Metrics): boolean {
+  return text.align === "center" && Math.abs(centred(text, metrics).x - text.x) <= 1;
+}
+
+/** A block that was centred on the canvas stays centred as its words change;
+ *  one the host moved stays where they put it. */
+export function keepCentred<T extends TextLayer>(before: TextLayer, after: T, metrics: Metrics): T {
+  return isCentred(before, metrics) ? centred(after, metrics) : after;
 }
 
 export function clampSize(size: number): number {
