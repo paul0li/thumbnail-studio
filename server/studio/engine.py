@@ -18,6 +18,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -51,7 +52,10 @@ class ImageEngine(Protocol):
     @property
     def configured(self) -> bool: ...
 
-    def edit(self, scene_png: bytes, prompt: str) -> EngineResult: ...
+    def edit(self, scene_png: bytes, prompt: str, references: Sequence[bytes] = ()) -> EngineResult:
+        """Edits the scene. `references` are further PNGs sent after it, in
+        order; the prompt says what each one is (ADR 0014)."""
+        ...
 
 
 @dataclass
@@ -73,12 +77,13 @@ class OpenAIImages:
     def configured(self) -> bool:
         return bool(self.api_key)
 
-    def _body(self, scene_png: bytes, prompt: str) -> dict:
+    def _body(self, scene_png: bytes, prompt: str, references: Sequence[bytes] = ()) -> dict:
         body = {
             "model": self.model,
             "prompt": prompt,
             "images": [
-                {"image_url": "data:image/png;base64," + base64.b64encode(scene_png).decode()}
+                {"image_url": "data:image/png;base64," + base64.b64encode(png).decode()}
+                for png in (scene_png, *references)
             ],
             "n": 1,
             "size": self.size,
@@ -91,7 +96,7 @@ class OpenAIImages:
             body["input_fidelity"] = "high"
         return body
 
-    def edit(self, scene_png: bytes, prompt: str) -> EngineResult:
+    def edit(self, scene_png: bytes, prompt: str, references: Sequence[bytes] = ()) -> EngineResult:
         if not self.api_key:
             raise EngineError(
                 "not_configured",
@@ -99,7 +104,7 @@ class OpenAIImages:
             )
         request = urllib.request.Request(
             self.url,
-            data=json.dumps(self._body(scene_png, prompt)).encode(),
+            data=json.dumps(self._body(scene_png, prompt, references)).encode(),
             method="POST",
             headers={
                 "Authorization": f"Bearer {self.api_key}",

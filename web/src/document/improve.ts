@@ -6,25 +6,26 @@
 
 import { autoBreaks, type Metrics } from "./layout";
 import { brandStyle } from "./presets";
-import { AUTO_WRAP_WIDTH, defaultSize, defaultWord, splitWords } from "./title";
+import { AUTO_WRAP_WIDTH, defaultSize, keepCentred, defaultWord, splitWords } from "./title";
 import { isText, type DesignDocument, type Layer, type TextLayer } from "./types";
 
 const isOverlay = (layer: Layer): boolean => layer.kind === "frame" || layer.kind === "logo";
 
 /** The title (or subtitle) as a new thumbnail draws it: the typed words,
  *  each in the brand style at the same size, wrapped automatically. Where it
- *  is and how big it is stay as the host left them. */
+ *  is, how big it is and its alignment stay as the host left them; a centred
+ *  block stays centred. */
 export function plainTitle<T extends TextLayer>(title: T, metrics: Metrics): T {
   const words = splitWords(title.text).map((w) => defaultWord(w, defaultSize(title.kind)));
-  return {
+  const plain: T = {
     ...title,
     ...brandStyle(),
     // Only the title carries the show's accent bar.
     ...(title.kind === "subtitle" ? { accent: null } : {}),
     autoBreaks: true,
-    align: "left",
     words: autoBreaks(words, AUTO_WRAP_WIDTH, metrics),
   };
+  return keepCentred(title, plain, metrics);
 }
 
 /** What the engine gets under the scene where there is no background photo. */

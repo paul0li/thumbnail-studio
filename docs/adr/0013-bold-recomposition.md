@@ -1,6 +1,6 @@
 # 0013 — «Mejorar» recomposes the collage boldly, with the frame's area marked grey
 
-**Status:** Accepted · 2026-11-05 · Supersedes in part 0010
+**Status:** Accepted · 2026-11-05 · Supersedes in part 0010 · Superseded in part by 0014
 
 ## Context
 

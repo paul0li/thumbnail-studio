@@ -5,7 +5,7 @@ import { engineScene, plainTitle } from "./improve";
 import { layoutTitle } from "./layout";
 import { applyPreset } from "./presets";
 import { mono } from "./testing";
-import { SUBTITLE_WORD_SIZE } from "./title";
+import { isCentred, SUBTITLE_WORD_SIZE } from "./title";
 import type { PhotoRef } from "./types";
 import { validateDocument } from "./validate";
 
@@ -17,15 +17,17 @@ describe("the subtitle", () => {
     expect(setSubtitle(newDocument(), "  ", mono).layers.map((l) => l.kind)).toEqual(["background", "title"]);
   });
 
-  it("starts just under the title, left aligned with it, smaller and without the accent bar", () => {
-    const doc = setSubtitle(newDocument(), "CON UN INVITADO", mono);
+  it("starts just under the title, aligned with it, smaller and without the accent bar", () => {
+    const doc = setSubtitle(newDocument(undefined, mono), "CON UN INVITADO", mono);
     const t = title(doc)!;
     const s = subtitle(doc)!;
     expect(doc.layers.map((l) => l.kind)).toEqual(["background", "title", "subtitle"]);
     expect(s.words.map((w) => w.text)).toEqual(["CON", "UN", "INVITADO"]);
     expect(s.words.every((w) => w.size === SUBTITLE_WORD_SIZE)).toBe(true);
     expect(s.accent).toBeNull();
-    expect(s.x).toBe(t.x);
+    // The title starts centred on the canvas, and so does the subtitle.
+    expect(s.align).toBe(t.align);
+    expect(isCentred(s, mono)).toBe(true);
     expect(s.y).toBeGreaterThan(t.y + layoutTitle(t.words, t.align, mono).height);
     expect(validateDocument(doc).ok).toBe(true);
   });

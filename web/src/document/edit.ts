@@ -3,7 +3,7 @@
 
 import { accentRule, autoBreaks, layoutTitle, type Metrics } from "./layout";
 import { brandStyle } from "./presets";
-import { AUTO_WRAP_WIDTH, caseFor, defaultWord, retitle, splitWords, SUBTITLE_WORD_SIZE } from "./title";
+import { AUTO_WRAP_WIDTH, caseFor, centred, defaultWord, isCentred, retitle, splitWords, SUBTITLE_WORD_SIZE } from "./title";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -29,6 +29,8 @@ export const MAX_SCALE_PX = 2400;
 export const HOST_HEIGHT = 600;
 export const GUEST_HEIGHT = 440;
 export const LOGO_WIDTH = 220;
+/** Every person starts with the show's thin, hard white outline. */
+export const PERSON_OUTLINE: Effect = { type: "outline", color: "#FFFFFF", width: 5 };
 /** Guests start at the left edge and stand side by side, overlapping a little. */
 const GUEST_LEFT = 20;
 const GUEST_OVERLAP = 40;
@@ -43,21 +45,24 @@ export function newId(prefix: string): string {
  *  types theirs. */
 export const SAMPLE_TITLE = "ESCRIBE EL TÍTULO";
 
-export function newDocument(typedTitle = SAMPLE_TITLE): DesignDocument {
+export function newDocument(typedTitle = SAMPLE_TITLE, metrics: Metrics | null = null): DesignDocument {
   const title = caseFor("title", typedTitle);
-  const titleLayer: TitleLayer = {
+  let words = splitWords(title).map((w) => defaultWord(w));
+  if (metrics) words = autoBreaks(words, AUTO_WRAP_WIDTH, metrics);
+  let titleLayer: TitleLayer = {
     id: newId("title"),
     kind: "title",
     text: title,
-    words: splitWords(title).map((w) => defaultWord(w)),
+    words,
     autoBreaks: true,
-    align: "left",
-    // Top left, where the show's title always goes.
-    x: 50,
+    align: "center",
+    // Centred at the top, where the show's title always goes.
+    x: (CANVAS_WIDTH - AUTO_WRAP_WIDTH) / 2,
     y: 50,
     scale: 1,
     ...brandStyle(),
   };
+  if (metrics) titleLayer = centred(titleLayer, metrics);
   return {
     version: DOCUMENT_VERSION,
     width: CANVAS_WIDTH,
@@ -152,7 +157,7 @@ export function addPerson(doc: DesignDocument, photo: PhotoRef, slot: PersonLaye
     y: CANVAS_HEIGHT - height / 2,
     scale,
     flipX: false,
-    effects: [],
+    effects: [{ ...PERSON_OUTLINE }],
   };
   // The host stands behind the guests, as in the show's thumbnails.
   const firstGuest = doc.layers.findIndex((l) => l.kind === "person" && l.slot === "guest");
@@ -315,18 +320,19 @@ export function setSubtitle(doc: DesignDocument, text: string, metrics: Metrics 
     text,
     words,
     autoBreaks: true,
-    align: "left",
+    align: t?.align ?? "left",
     x,
     y: Math.min(CANVAS_HEIGHT - SUBTITLE_WORD_SIZE, y),
     scale: 1,
     ...brandStyle(),
     accent: null,
   };
+  const placed = metrics && t && isCentred(t, metrics) ? centred(layer, metrics) : layer;
   // Just above the title, so both read over the photos.
   const at = t ? doc.layers.indexOf(t) + 1 : -1;
-  if (at <= 0) return insertOnTop(doc, layer);
+  if (at <= 0) return insertOnTop(doc, placed);
   const layers = [...doc.layers];
-  layers.splice(at, 0, layer);
+  layers.splice(at, 0, placed);
   return { ...doc, layers };
 }
 

@@ -70,6 +70,12 @@ def test_the_edit_sends_the_scene_the_prompt_and_a_16_9_size(sent):
         body["images"][0]["image_url"]
         == "data:image/png;base64," + base64.b64encode(b"scene-bytes").decode()
     )
+    # References go after the scene, in order.
+    with_refs = OpenAIImages(api_key=KEY)._body(b"scene", "p", [b"guest", b"host"])
+    assert [i["image_url"] for i in with_refs["images"]] == [
+        "data:image/png;base64," + base64.b64encode(x).decode()
+        for x in (b"scene", b"guest", b"host")
+    ]
     # gpt-image-2 refuses input_fidelity; older models need it to keep faces.
     assert "input_fidelity" not in body
     older = OpenAIImages(api_key=KEY, model="gpt-image-1.5")._body(b"x", "p")

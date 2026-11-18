@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { newDocument, setSubtitle, subtitle, title } from "./edit";
+import { newDocument, placeLayer, setSubtitle, subtitle, title } from "./edit";
 import { mono } from "./testing";
-import { retitle, splitWords, wordsMatchText } from "./title";
+import { isCentred, retitle, splitWords, wordsMatchText } from "./title";
 
 describe("splitWords", () => {
   it("splits on any whitespace and drops nothing else", () => {
@@ -19,6 +19,24 @@ describe("wordsMatchText", () => {
 });
 
 describe("retitle", () => {
+  it("a new title is centred at the top, and stays centred as it is typed", () => {
+    const t = title(newDocument(undefined, mono))!;
+    expect(t.align).toBe("center");
+    expect(t.y).toBe(50);
+    expect(isCentred(t, mono)).toBe(true);
+    const typed = retitle(t, "nadie lo vio venir esta vez", mono);
+    expect(typed.x).not.toBe(t.x);
+    expect(isCentred(typed, mono)).toBe(true);
+  });
+
+  it("a title the host moved stays where they put it when retyped", () => {
+    let doc = newDocument(undefined, mono);
+    doc = placeLayer(doc, title(doc)!.id, 300, 80);
+    const moved = title(doc)!;
+    const typed = retitle(moved, "OTRO TÍTULO MÁS LARGO", mono);
+    expect([typed.x, typed.y]).toEqual([moved.x, moved.y]);
+  });
+
   it("keeps each word's style by position and puts the title in capitals", () => {
     const t = title(newDocument("UNO DOS"))!;
     const styled = { ...t, autoBreaks: false, words: [t.words[0]!, { ...t.words[1]!, size: 200, box: { color: "#FFD400" } }] };

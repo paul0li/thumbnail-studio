@@ -3,6 +3,7 @@
 
 import { photoRef, type Photo } from "../api";
 import { newDocument, people, setFrame, setHost, setLogo } from "../document/edit";
+import type { Metrics } from "../document/layout";
 import { isText, type DesignDocument } from "../document/types";
 
 function pickPhoto(photos: readonly Photo[], role: Photo["role"], lastId: string | undefined): Photo | undefined {
@@ -13,12 +14,16 @@ function pickPhoto(photos: readonly Photo[], role: Photo["role"], lastId: string
 
 /** A fresh document carrying over the frame, logo and host of `previous`
  *  (falling back to the newest frame and logo in the library). */
-export function startOfDay(previous: DesignDocument | null, photos: readonly Photo[]): DesignDocument {
+export function startOfDay(
+  previous: DesignDocument | null,
+  photos: readonly Photo[],
+  metrics: Metrics | null = null,
+): DesignDocument {
   const last = (kind: "frame" | "logo") => {
     const layer = previous?.layers.find((l) => l.kind === kind);
     return layer && !isText(layer) && layer.photo ? layer.photo.photoId : undefined;
   };
-  let doc = newDocument();
+  let doc = newDocument(undefined, metrics);
   const frame = pickPhoto(photos, "frame", last("frame"));
   if (frame) doc = setFrame(doc, photoRef(frame));
   const logo = pickPhoto(photos, "logo", last("logo"));

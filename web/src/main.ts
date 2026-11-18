@@ -584,7 +584,7 @@ async function main(): Promise<void> {
 
   async function startNew(): Promise<void> {
     if (!(await readyToLeave())) return;
-    begin(startOfDay(store.doc, library.photos), "push");
+    begin(startOfDay(store.doc, library.photos, metrics), "push");
     panel.querySelector<HTMLElement>("h1")?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
     toast("Miniatura nueva. La anterior quedó en «Mis miniaturas».");
@@ -629,7 +629,7 @@ async function main(): Promise<void> {
       return;
     }
     toast("Miniatura borrada.");
-    begin(startOfDay(store.doc, library.photos), "push");
+    begin(startOfDay(store.doc, library.photos, metrics), "push");
   }
 
   function backToEditor(): void {
@@ -1033,7 +1033,7 @@ async function main(): Promise<void> {
       }
       await refreshLibrary();
     }
-    begin(legacy ?? startOfDay(null, library.photos));
+    begin(legacy ?? startOfDay(null, library.photos, metrics));
     if (legacy) forgetLegacyDraft();
   }
   if (startScreen === "history") {

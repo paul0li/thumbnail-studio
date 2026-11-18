@@ -4,6 +4,7 @@ import {
   GUEST_HEIGHT,
   HOST_HEIGHT,
   people,
+  PERSON_OUTLINE,
   setHost,
   toggleGuest,
   canReorder,
@@ -29,6 +30,14 @@ describe("document edits", () => {
     if (person.kind !== "person") throw new Error();
     expect(person.photo.height * person.scale).toBe(GUEST_HEIGHT);
     expect(person.y + (person.photo.height * person.scale) / 2).toBe(720);
+  });
+
+  it("every new person starts with the show's thin white outline", () => {
+    let doc = setHost(newDocument(), photo);
+    doc = toggleGuest(doc, { ...photo, photoId: "g" });
+    for (const p of people(doc)) expect(p.effects).toEqual([PERSON_OUTLINE]);
+    expect(PERSON_OUTLINE).toMatchObject({ type: "outline", color: "#FFFFFF" });
+    expect(validateDocument(doc).ok).toBe(true);
   });
 
   it("the host goes flush right and behind the guests; guests line up from the left", () => {

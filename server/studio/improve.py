@@ -2,8 +2,9 @@
 
 What goes to the engine is the scene: background, people and the title (and
 subtitle, if any) in their plain style, drawn by the browser without the frame
-and the logo, with flat grey where the frame will go (ADR 0013). The engine
-is asked to recompose it boldly. What comes back is fitted to 1280x720, gets
+and the logo, with flat grey where the frame will go (ADR 0013), followed by
+each person's own photo. The engine is asked to keep the show's template and
+make it minimalist, bold only in the title (ADR 0014). What comes back is fitted to 1280x720, gets
 the original faces put back by registration, gets the browser's overlay
 (frame and logo) pasted on top, and is checked (every face restored, nobody
 added, the words of the title and subtitle exactly as typed and not hidden by
@@ -45,66 +46,67 @@ log = logging.getLogger("studio.improve")
 WIDTH, HEIGHT = faces.CANVAS
 _ID_PREFIX = "imp"
 
-# The instruction, in English for the model (ADR 0013). The host's collage is
-# a brief, not a layout: the model recomposes it boldly. Fixed for now; a later
-# slice has Opus write it from what it sees.
-PROMPT = """Edit this image into one bold, professionally designed YouTube thumbnail.
+# The instruction, in English for the model (ADR 0014). The host's layout is
+# the show's template and stays: the title centred at the top, guests on the
+# left, the host on the right, each with a thin white outline. The model makes
+# it minimalist and is free only with the title's emphasis. Fixed for now; a
+# later slice has Opus write it from what it sees.
+PROMPT = """Edit the first image into a clean, minimalist YouTube thumbnail for a talk show.
 
-The image is a rough collage made by the show's host: real people cut out and
-placed over a background, with a title in plain white letters. Treat it as a
-brief, not as a layout: it tells you WHO is in it and WHAT the title says, but
-the arrangement is a draft. Redesign the composition as a top YouTube
-thumbnail designer would, so it reads in one glance on a phone and makes
-someone want to click.
+The inputs, in order:
+- Image 1, THE SCENE: the thumbnail to edit. Everything you return is this
+  image, edited.
+{cast}Those photos are only references for who the people are and how their faces,
+glasses, hair and clothes look. Do not paste them in a second time.
+
+The layout is the show's template and must be kept:
+- The title is centred at the top.
+- The guests stand on the left and the host on the right, cut off at the
+  bottom edge. You may make the people somewhat bigger, keeping each on
+  their side.
+- Each person has a thin, crisp, solid white outline around their cutout.
+  Keep it white, thin and clean, like a sticker border.
+Do not swap, mirror or turn anyone, and do not move the title off the top.
+
+Make it minimalist:
+- Keep the background's place and subject, but calmer: simpler, slightly
+  darker and softly out of focus, so the people and the title stand out.
+- Unify the lighting on the people so they look shot in the same light.
+  No rim lights, glows, flares, sparks, smoke, light rays or vignettes.
+- Add nothing: no objects, props, icons, arrows, emoji, shapes, badges,
+  captions, logos or extra text.
+
+People:
+- The people are always in front of the title. Where a head, hair or a
+  body overlaps the title, the person covers the letters, never the other
+  way round. Keep the faces themselves (eyes, nose, mouth) clear of letters,
+  and keep every word readable.
+- Count the people in the scene before editing and return exactly that many.
+  Never drop, merge or crop anyone out to make room.
+- Keep exactly the same people. Keep every face recognisable and unchanged:
+  same identity, same expression, same glasses and hair. Do not beautify,
+  age, restyle, turn or redraw faces. Add nobody, and do not duplicate anyone.
+- Keep what they hold or have in front of them, such as a microphone.
+
+Title:
+- The title is the one place where you may be bold. Make it grab attention
+  the way a top YouTube designer would: pick the one or two words that carry
+  the story and make them clearly bigger, and/or highlight them, for
+  example in the show's coral red (#F24B35) or a warm yellow, or as white
+  letters on a solid coral red box. Short words (articles, prepositions)
+  may be smaller. Keep it one centred block at the top.
+- Heavy condensed sans serif, flat solid colours, with a subtle soft dark
+  shadow. No gradient, texture, glow, bevel, 3D or more than two colours.
+- Keep its words exactly, letter by letter, in the same order, including
+  accents and Ñ: "{title}".
+{subtitle}- Add no other text anywhere: no captions, no logos, no watermarks.
 
 Reserved areas: flat grey areas of the input (for example a band across the
 bottom with a round badge rising from it, and a thin border) are where the
 show's frame is pasted afterwards, hiding whatever is there. Keep every
-letter, every face, every hand and anything the viewer must see clear of
-them, with a margin, not even partly inside. Bodies and background may run
-behind them. Do not reproduce the grey: fill it with background or bodies.
-
-Composition, boldly:
-- Big faces: crop tight (head and shoulders) and make the faces clearly
-  bigger than in the collage, up to about twice, with the most newsworthy
-  person largest. Let the people fill their side and overlap slightly, so
-  they read as one scene and not as separate photos.
-- Put the text in one block in the open area, as large as it can be while
-  staying off the faces and out of the reserved areas.
-- At most three things to look at: the people, the text block, and one
-  visual cue of the story in the background.
-
-People:
-- Keep exactly the same people. Keep every face recognisable and unchanged:
-  same identity, same expression, same glasses and hair. Do not beautify,
-  age, restyle, turn or redraw faces.
-- You may move, resize and reorder the people and crop them tighter.
-  Complete bodies naturally where needed.
-- Unify the lighting on everyone, with a strong rim light separating them
-  from the background.
-- Add no people and no faces, and do not remove anyone, even someone who is
-  only partly visible. Do not duplicate anyone.
-
-Background:
-- Keep it vivid, saturated and on topic. Do not darken it or wash it out,
-  and add no dark vignette.
-- Keep it simple behind the people, with the contrast that makes them stand
-  out. Keep its characters as they are; do not turn any of them into a real
-  person.
-
-Title:
-- Make the title one compact block with a clear hierarchy: the one or two
-  words that carry the story clearly bigger, short words (articles,
-  prepositions, conjunctions) small.
-- Keep clear space between the text and every head: no letter may touch or
-  overlap a face or hair.
-- Lettering style, strictly: flat letters in a heavy condensed sans serif,
-  with ONE solid colour fill per word (white, yellow or red), a clean solid
-  dark outline and a soft drop shadow. No texture, no grain, no gradient
-  inside the letters, no metallic, grunge, glow, bevel or 3D extrusion.
-- Keep its words exactly, letter by letter, in the same order, including
-  accents and Ñ: "{title}".
-{subtitle}- Add no other text anywhere: no captions, no logos, no watermarks.
+letter and every face clear of them, with a margin. Bodies and background
+may run behind them. Do not reproduce the grey: fill it with background or
+bodies.
 
 Framing: keep the 16:9 landscape framing of the input.
 """
@@ -118,9 +120,38 @@ SUBTITLE_RULES = """- There is a second, smaller line: the subtitle. Restyle it 
 """
 
 
-def make_prompt(title: str, subtitle: str = "") -> str:
+@dataclass(frozen=True)
+class Reference:
+    """One person's own photo, sent after the scene so the model knows who
+    is who (ADR 0014)."""
+
+    slot: str  # "host" or "guest"
+    side: str  # "left" or "right", where they stand in the scene
+    people: int  # faces in the photo; a guest photo may show two people
+    png: bytes
+
+
+def _count(n: int) -> str:
+    words = {1: "one person", 2: "two people, side by side", 3: "three people"}
+    return words.get(n, f"{n} people")
+
+
+def cast_lines(references: list[Reference]) -> str:
+    """The labels of the photos after the scene, one per image."""
+    lines = []
+    for i, ref in enumerate(references, start=2):
+        who = "THE HOST" if ref.slot == "host" else "A GUEST"
+        lines.append(
+            f"- Image {i}, {who}: the photo placed on the {ref.side} of the scene. It\n"
+            f"  shows {_count(max(1, ref.people))}. Every person in it must be in the result,\n"
+            "  whole face visible.\n"
+        )
+    return "".join(lines)
+
+
+def make_prompt(title: str, subtitle: str = "", references: list[Reference] | None = None) -> str:
     rules = SUBTITLE_RULES.format(subtitle=subtitle) if subtitle else ""
-    return PROMPT.format(title=title, subtitle=rules)
+    return PROMPT.format(title=title, subtitle=rules, cast=cast_lines(references or []))
 
 
 STAGES = ("engine", "faces", "checks", "frame", "done")
@@ -269,6 +300,34 @@ def placements(settings: Settings, doc: dict) -> list[faces.Placement]:
     return found
 
 
+# How big a person's photo is sent as a reference, on its longer side.
+REFERENCE_SIZE = 1024
+
+
+def person_references(
+    doc: dict, people: list[faces.Placement], found: list[faces.SceneFace]
+) -> list[Reference]:
+    """The guests from left to right, then the host: each person's own photo
+    as a reference, with where they stand and how many faces it shows."""
+    by_id = {p.layer_id: p for p in people}
+    layers = [layer for layer in doc["layers"] if layer["kind"] == "person"]
+    layers.sort(key=lambda layer: (layer.get("slot") == "host", float(layer["x"])))
+    references = []
+    for layer in layers:
+        placement = by_id[layer["id"]]
+        image = placement.image.copy()
+        image.thumbnail((REFERENCE_SIZE, REFERENCE_SIZE))
+        references.append(
+            Reference(
+                slot="host" if layer.get("slot") == "host" else "guest",
+                side="left" if placement.x < WIDTH / 2 else "right",
+                people=sum(1 for f in found if f.layer_id == layer["id"]),
+                png=_png(image),
+            )
+        )
+    return references
+
+
 def _who(doc: dict, layer_id: str) -> str:
     for layer in doc["layers"]:
         if layer["id"] == layer_id:
@@ -369,7 +428,7 @@ class Pipeline:
     # Where runs happen. One at a time: the engine is slow and paid for, and
     # the host makes one thumbnail at a time.
     executor: Executor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=1))
-    prompt: Callable[[str, str], str] = make_prompt
+    prompt: Callable[..., str] = make_prompt
 
     def _store(self, data: bytes, image_format: str = "PNG") -> str:
         _, relative = storage.store_bytes(
@@ -511,8 +570,18 @@ class Pipeline:
         found = faces.faces_in_layers(people, self.detector)
         report["faces"] = [f.as_json() for f in found]
 
+        # Each person's own photo goes after the scene, labelled in the prompt.
+        references = person_references(doc, people, found)
+        report["references"] = [
+            {"slot": r.slot, "side": r.side, "people": r.people} for r in references
+        ]
+
         try:
-            result = self.engine.edit(scene_png, self.prompt(title, subtitle))
+            result = self.engine.edit(
+                scene_png,
+                self.prompt(title, subtitle, references),
+                [r.png for r in references],
+            )
         except EngineError as exc:
             raise Failure(exc.code, exc.reason, exc.detail) from None
         report["engine"] = result.info

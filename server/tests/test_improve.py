@@ -86,14 +86,16 @@ class FakeEngine:
         self._configured = configured
         self.calls: list[str] = []
         self.scenes: list[bytes] = []
+        self.references: list[list[bytes]] = []
 
     @property
     def configured(self):
         return self._configured
 
-    def edit(self, scene_png, prompt):
+    def edit(self, scene_png, prompt, references=()):
         self.calls.append(prompt)
         self.scenes.append(scene_png)
+        self.references.append(list(references))
         return self.respond(scene_png)
 
 
@@ -497,6 +499,30 @@ def test_a_subtitle_is_asked_for_word_by_word_and_checked(setup):
     started = start(client, scene).json()
     assert client.get(f"/api/improvements/{started['id']}").json()["status"] == "ready"
     assert f'"{SUBTITLE}"' in engine.calls[0]
+
+
+def test_each_persons_own_photo_goes_after_the_scene_labelled_in_the_prompt(setup):
+    client, engine, *_, scene = setup()
+    start(client, scene)
+    (references,) = engine.references
+    assert len(references) == 1
+    with Image.open(io.BytesIO(references[0])) as photo:
+        assert max(photo.size) <= improve.REFERENCE_SIZE
+    assert "Image 2, THE HOST" in engine.calls[0]
+    assert "Image 3" not in engine.calls[0]
+
+
+def test_the_cast_lists_guests_left_to_right_then_the_host():
+    refs = [
+        improve.Reference("guest", "left", 2, b""),
+        improve.Reference("host", "right", 1, b""),
+    ]
+    prompt = improve.make_prompt("TÍTULO", "", refs)
+    guest = prompt.index("Image 2, A GUEST: the photo placed on the left")
+    host = prompt.index("Image 3, THE HOST: the photo placed on the right")
+    assert guest < host
+    assert "two people, side by side" in prompt
+    assert '"TÍTULO"' in prompt
 
 
 def test_without_a_subtitle_the_prompt_does_not_mention_one(setup):
