@@ -8,9 +8,10 @@ make it minimalist, bold only in the title (ADR 0014). What comes back is fitted
 the original faces put back by registration, gets the browser's overlay
 (frame and logo) pasted on top, and is checked (every face restored, nobody
 added, the words of the title and subtitle exactly as typed and not hidden by
-the frame). Any failure on the way is
-the result: there is no fallback, and nothing is shown as if it were the
-improvement (ADR 0006).
+the frame). A failure before the checks is the result: there is no fallback
+(ADR 0006). A check that fails, or a reader that cannot answer, does not throw
+the picture away: the run ends with the picture and a warning saying what the
+check saw, and the host decides (ADR 0015).
 
 A run takes a minute or two, so it runs in the background and the browser
 asks how it is going. Each run is a row in `improvements`, tied to the
@@ -351,6 +352,8 @@ def as_json(row) -> dict:
         "stage": row["stage"],
         "failure": row["failure"],
         "reason": row["reason"],
+        # A finished picture whose checks failed: shown with this, never alone.
+        "warning": row["reason"] if row["status"] == "ready" else None,
         "final_url": f"/api/files/{row['final_path']}" if row["final_path"] else None,
         "created_at": row["created_at"],
         "finished_at": row["finished_at"],
@@ -378,10 +381,12 @@ def latest(conn, thumbnail_id: str) -> dict | None:
 def kept(conn, thumbnail_id: str) -> dict | None:
     """The thumbnail's improved picture: the final picture of its latest run
     that ended well, chosen with «Usar esta» or not. A later run that fails
-    does not take it away, and neither does downloading her own."""
+    does not take it away, and neither does downloading her own. A picture
+    that came with a warning is hers only once she uses it (ADR 0015)."""
     row = conn.execute(
         """SELECT * FROM improvements
            WHERE thumbnail_id = ? AND status = 'ready' AND final_path IS NOT NULL
+             AND (failure IS NULL OR chosen_at IS NOT NULL)
            ORDER BY created_at DESC, id DESC LIMIT 1""",
         (thumbnail_id,),
     ).fetchone()
@@ -615,28 +620,17 @@ class Pipeline:
         restored_image = _pil(restored.image)
         restored_png = _png(restored_image)
         _update(self.db, improvement_id, restored_path=self._store(restored_png), stage="checks")
-        if extra:
-            raise Failure(
-                "added_person",
-                "La IA agregó una persona que no estaba en la miniatura.",
-                f"{len(extra)} faces",
-            )
 
-        # The text is read with the frame on: a word the frame hides is a word
-        # the viewer does not see.
+        # The checks warn, they do not discard: the host sees the picture and
+        # what the check saw, and decides (ADR 0015).
         final_png = _png(compose(restored_image, overlay))
-        try:
-            reading = self.reader.read(scene_png, final_png)
-        except ReadbackError as exc:
-            raise Failure(f"readback_{exc.code}", exc.reason, exc.detail) from None
-        report["reading"] = reading.as_json()
-        if reading.added_people:
-            raise Failure(
-                "added_person",
-                "La IA agregó una persona que no estaba en la miniatura.",
-                reading.notes,
+        warnings = self._checks(scene_png, final_png, extra, title, subtitle, report)
+        if warnings:
+            report["warnings"] = [{"code": w.code, "detail": w.detail} for w in warnings]
+            log.warning(
+                "improvement checks failed",
+                extra={"improvement": improvement_id, "failure": [w.code for w in warnings]},
             )
-        _check_text(reading, title, subtitle)
 
         _update(self.db, improvement_id, stage="frame")
         final_path = self._store(final_png)
@@ -646,9 +640,55 @@ class Pipeline:
             final_path=final_path,
             status="ready",
             stage="done",
+            failure=",".join(w.code for w in warnings) or None,
+            reason=" ".join(w.reason for w in warnings) or None,
             report=json.dumps(report, ensure_ascii=False, default=str),
             finished_at=now(),
         )
+
+    def _checks(
+        self,
+        scene_png: bytes,
+        final_png: bytes,
+        extra: list,
+        title: str,
+        subtitle: str,
+        report: dict,
+    ) -> list[Failure]:
+        """What is wrong with the final picture, as far as the checks can tell.
+        The text is read with the frame on: a word the frame hides is a word
+        the viewer does not see."""
+        added = Failure(
+            "added_person",
+            "La IA agregó una persona que no estaba en la miniatura.",
+            f"{len(extra)} faces",
+        )
+        warnings = [added] if extra else []
+        try:
+            reading = self.reader.read(scene_png, final_png)
+        except ReadbackError as exc:
+            warnings.append(
+                Failure(
+                    f"readback_{exc.code}",
+                    f"{exc.reason} No se revisaron el título ni las personas.",
+                    exc.detail,
+                )
+            )
+            return warnings
+        report["reading"] = reading.as_json()
+        if reading.added_people and not extra:
+            warnings.append(
+                Failure(
+                    "added_person",
+                    "La IA agregó una persona que no estaba en la miniatura.",
+                    reading.notes,
+                )
+            )
+        try:
+            _check_text(reading, title, subtitle)
+        except Failure as failure:
+            warnings.append(failure)
+        return warnings
 
 
 def _as_stored(data: bytes) -> tuple[bytes, str]:

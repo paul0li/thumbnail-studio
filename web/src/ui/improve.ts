@@ -76,10 +76,20 @@ function waiting(state: Extract<ImproveState, { kind: "sending" | "running" }>):
 }
 
 function result(improvement: Improvement, actions: ImproveActions): HTMLElement {
+  const warning = improvement.warning;
   return h(
     "div",
     { class: "panel-body" },
-    h("h1", { tabindex: "-1" }, "¿Usas la mejorada?"),
+    h("h1", { tabindex: "-1" }, warning ? "Revísala antes de usarla" : "¿Usas la mejorada?"),
+    warning
+      ? h(
+          "div",
+          { class: "note warning", role: "alert" },
+          h("strong", {}, "Ojo: "),
+          warning,
+          " Mírala bien: si está bien, úsala igual.",
+        )
+      : null,
     h("p", { class: "muted" }, "Arriba está la tuya. Esta es la mejorada:"),
     h("img", {
       class: "improved",

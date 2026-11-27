@@ -161,6 +161,9 @@ export interface Improvement {
   failure: string | null;
   /** Why it failed, in Spanish, for the host. */
   reason: string | null;
+  /** A finished picture whose checks failed: what they saw, in Spanish. She
+   *  decides whether to use it (ADR 0015). */
+  warning: string | null;
   final_url: string | null;
   created_at: string;
   finished_at: string | null;

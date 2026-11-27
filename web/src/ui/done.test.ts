@@ -36,6 +36,12 @@ describe("reopening a thumbnail from «Mis miniaturas»", () => {
     expect(reopenView({ kept: true, run: null, left: "title" })).toBe("done");
   });
 
+  it("shows a picture that came with a warning until she judges it", () => {
+    expect(reopenView({ kept: false, run: "ready", left: "improve", warned: true })).toBe("improve");
+    expect(reopenView({ kept: true, run: "ready", left: "improve", warned: true })).toBe("improve");
+    expect(reopenView({ kept: false, run: "ready", left: "title", warned: true })).toBeNull();
+  });
+
   it("shows a run that is still going, or one that failed while she was away", () => {
     expect(reopenView({ kept: true, run: "running", left: "title" })).toBe("improve");
     expect(reopenView({ kept: true, run: "failed", left: "improve" })).toBe("improve");
@@ -56,6 +62,7 @@ describe("keeping an improvement", () => {
     stage: "done",
     failure: null,
     reason: null,
+    warning: null,
     final_url: "/api/files/ab/final.png",
     created_at: "",
     finished_at: "2026-10-28T10:01:00Z",
@@ -66,5 +73,9 @@ describe("keeping an improvement", () => {
     expect(keptFrom(run)).toEqual({ id: "imp1", version: 2, url: "/api/files/ab/final.png", finished_at: run.finished_at, chosen: false });
     expect(keptFrom({ ...run, status: "failed", final_url: null })).toBeNull();
     expect(keptFrom({ ...run, status: "running", final_url: null })).toBeNull();
+    // A picture with a warning is hers only once she uses it.
+    const warned = { ...run, failure: "added_person", reason: "Ojo.", warning: "Ojo." };
+    expect(keptFrom(warned)).toBeNull();
+    expect(keptFrom({ ...warned, chosen: true })?.chosen).toBe(true);
   });
 });
