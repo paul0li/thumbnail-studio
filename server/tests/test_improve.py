@@ -279,6 +279,17 @@ def failed(client, scene, **kwargs) -> dict:
     return improvement
 
 
+def warned(client, scene, **kwargs) -> dict:
+    """A run whose checks failed: it ends with its picture and a warning."""
+    started = start(client, scene, **kwargs)
+    assert started.status_code == 202, started.text
+    improvement = client.get(f"/api/improvements/{started.json()['id']}").json()
+    assert improvement["status"] == "ready", improvement
+    assert improvement["final_url"]
+    assert improvement["warning"] == improvement["reason"]
+    return improvement
+
+
 def test_without_a_key_the_improvement_fails_and_says_why(setup):
     engine = FakeEngine(configured=False)
     client, *_, scene = setup(engine=engine)
@@ -314,13 +325,27 @@ def test_a_face_the_engine_replaced_cannot_be_restored_and_rejects_the_result(se
     assert reader.seen == []
 
 
-def test_an_added_face_rejects_the_result(setup):
+def test_an_added_face_warns_and_leaves_the_choice_to_the_host(setup):
     detector = FakeDetector()
     detector.extra = [faces.Detection(faces.Box(100, 200, 230, 380), 0.93)]
     client, _, reader, _, scene = setup(detector=detector)
-    improvement = failed(client, scene)
+    improvement = warned(client, scene)
     assert improvement["failure"] == "added_person"
-    assert reader.seen == []
+    assert "agregó una persona" in improvement["warning"]
+    # The title is still read, so a second problem is said too.
+    assert reader.seen != []
+
+
+def test_a_warned_picture_is_kept_only_once_it_is_used(setup):
+    detector = FakeDetector()
+    detector.extra = [faces.Detection(faces.Box(100, 200, 230, 380), 0.93)]
+    client, *_, scene = setup(detector=detector)
+    improvement = warned(client, scene)
+    assert client.get(f"/api/thumbnails/{ID}").json()["improved"] is None
+    used = client.post(f"/api/improvements/{improvement['id']}/use")
+    assert used.status_code == 200
+    assert used.json()["export_url"] == improvement["final_url"]
+    assert used.json()["improved"]["id"] == improvement["id"]
 
 
 def test_a_small_face_in_the_background_is_not_a_new_person(setup):
@@ -331,14 +356,14 @@ def test_a_small_face_in_the_background_is_not_a_new_person(setup):
     assert client.get(f"/api/improvements/{started['id']}").json()["status"] == "ready"
 
 
-def test_the_reader_seeing_an_added_person_rejects_the_result(setup):
+def test_the_reader_seeing_an_added_person_warns(setup):
     client, *_, scene = setup(reader=FakeReader(added=True))
-    assert failed(client, scene)["failure"] == "added_person"
+    assert warned(client, scene)["failure"] == "added_person"
 
 
-def test_a_changed_title_rejects_the_result_and_says_what_it_reads(setup):
+def test_a_changed_title_warns_and_says_what_it_reads(setup):
     client, *_, scene = setup(reader=FakeReader(title="EL ANO QUE NADIE VIO"))
-    improvement = failed(client, scene)
+    improvement = warned(client, scene)
     assert improvement["failure"] == "title_changed"
     assert "«EL ANO QUE NADIE VIO»" in improvement["reason"]
 
@@ -349,11 +374,12 @@ def test_the_title_check_ignores_case_and_line_breaks_but_not_letters(setup):
     assert client.get(f"/api/improvements/{started['id']}").json()["status"] == "ready"
 
 
-def test_a_reader_that_cannot_run_fails_the_improvement(setup):
+def test_a_reader_that_cannot_run_warns_that_nothing_was_checked(setup):
     error = ReadbackError("missing", "No está instalado Claude Code en el servidor.")
     client, *_, scene = setup(reader=FakeReader(error=error))
-    improvement = failed(client, scene)
+    improvement = warned(client, scene)
     assert improvement["failure"] == "readback_missing"
+    assert "No se revisaron" in improvement["warning"]
     assert "Claude Code" in improvement["reason"]
 
 
@@ -403,7 +429,7 @@ def test_the_pictures_of_a_run_are_served(setup, settings):
 
 def test_a_title_that_disappeared_is_said_plainly(setup):
     client, *_, scene = setup(reader=FakeReader(title=""))
-    improvement = failed(client, scene)
+    improvement = warned(client, scene)
     assert improvement["reason"] == "La IA quitó el título de la imagen."
 
 
@@ -531,16 +557,16 @@ def test_without_a_subtitle_the_prompt_does_not_mention_one(setup):
     assert "subtitle" not in engine.calls[0].lower()
 
 
-def test_a_changed_subtitle_rejects_the_result_and_says_what_it_reads(setup):
+def test_a_changed_subtitle_warns_and_says_what_it_reads(setup):
     client, *_, scene = setup(subtitle=SUBTITLE, reader=FakeReader(subtitle="CON UNA INVITADA"))
-    improvement = failed(client, scene)
+    improvement = warned(client, scene)
     assert improvement["failure"] == "subtitle_changed"
     assert "«CON UNA INVITADA»" in improvement["reason"]
 
 
-def test_a_dropped_subtitle_rejects_the_result(setup):
+def test_a_dropped_subtitle_warns(setup):
     client, *_, scene = setup(subtitle=SUBTITLE)
-    improvement = failed(client, scene)
+    improvement = warned(client, scene)
     assert improvement["failure"] == "subtitle_changed"
     assert "quitó el subtítulo" in improvement["reason"]
 

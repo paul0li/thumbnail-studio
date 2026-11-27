@@ -1131,3 +1131,7 @@ img.improved {
 .note.failure {
   border-color: var(--danger);
 }
+
+.note.warning {
+  border: 2px solid #f2b705;
+}

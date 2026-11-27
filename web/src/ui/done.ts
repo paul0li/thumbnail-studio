@@ -39,14 +39,22 @@ export function doneWords(o: { kept: Pick<KeptImprovement, "version"> | null; ve
  *  where she left it. A run of this version still going, or one that failed
  *  while she was away, is shown; otherwise an improved picture opens on the
  *  done screen. */
-export function reopenView(o: { kept: boolean; run: Improvement["status"] | null; left: string | null }): "improve" | "done" | null {
+export function reopenView(o: {
+  kept: boolean;
+  run: Improvement["status"] | null;
+  left: string | null;
+  /** The run ended with a picture and a warning, still hers to judge. */
+  warned?: boolean;
+}): "improve" | "done" | null {
   if (o.run === "running") return "improve";
-  if (o.run === "failed" && o.left === "improve") return "improve";
+  if ((o.run === "failed" || (o.run === "ready" && o.warned)) && o.left === "improve") return "improve";
   return o.kept ? "done" : null;
 }
 
 export function keptFrom(improvement: Improvement): KeptImprovement | null {
   if (improvement.status !== "ready" || !improvement.final_url) return null;
+  // A picture that came with a warning is hers only once she uses it.
+  if (improvement.warning && !improvement.chosen) return null;
   return {
     id: improvement.id,
     version: improvement.version,

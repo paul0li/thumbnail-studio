@@ -35,11 +35,12 @@ More in [`README.md`](README.md).
   - [0007 — A thumbnail is a layered design document with Figma-style effects](docs/adr/0007-design-document.md)
   - [0008 — The daily thumbnail is a guided routine; fine editing is tucked away](docs/adr/0008-guided-daily-routine.md)
   - [0009 — Thumbnails are saved as versions on the server, with undo as a path](docs/adr/0009-saved-thumbnails.md)
-  - [0010 — «Mejorar» sends the scene, restores faces by registration, checks, and pastes the frame last](docs/adr/0010-improvement-pipeline.md) (in part superseded by 0013)
+  - [0010 — «Mejorar» sends the scene, restores faces by registration, checks, and pastes the frame last](docs/adr/0010-improvement-pipeline.md) (in part superseded by 0013 and 0015)
   - [0011 — The improved picture stays with its thumbnail](docs/adr/0011-improved-picture-stays.md)
   - [0012 — An optional subtitle is a second text layer, restyled and checked like the title](docs/adr/0012-subtitle.md)
   - [0013 — «Mejorar» recomposes the collage boldly, with the frame's area marked grey](docs/adr/0013-bold-recomposition.md) (in part superseded by 0014)
   - [0014 — The show's template is fixed; «Mejorar» keeps it, is minimalist, and is free only with the title](docs/adr/0014-minimal-template.md)
+  - [0015 — A failed check warns; the host decides](docs/adr/0015-checks-warn.md)
 - `CLAUDE.local.md` / `AGENTS.local.md` (gitignored, may not exist): facts about
   one particular installation. Read them if present; never commit them.
 

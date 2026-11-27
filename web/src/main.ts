@@ -378,7 +378,7 @@ async function main(): Promise<void> {
       // It stays with the thumbnail from now on, whatever she taps.
       kept = keptFrom(improvement) ?? kept;
       keepBlob(improvement.final_url);
-      if (before) announce("Lista la miniatura mejorada.");
+      if (before) announce(improvement.warning ? "Lista la miniatura mejorada, con una advertencia." : "Lista la miniatura mejorada.");
     } else {
       improving = { kind: "failed", reason: improvement.reason ?? "Algo salió mal en el servidor." };
       if (before) announce("No se pudo mejorar.");
@@ -476,7 +476,7 @@ async function main(): Promise<void> {
     downloaded = "improved";
     try {
       await useImprovement(improvement.id);
-      if (kept?.id === improvement.id) kept = { ...kept, chosen: true };
+      kept = keptFrom({ ...improvement, chosen: true }) ?? kept;
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Se descargó, pero no se pudo guardar en «Mis miniaturas».", { error: true });
     }
@@ -566,7 +566,7 @@ async function main(): Promise<void> {
     let first = viewFor(state, id);
     // A run of the version that opened is shown; any other is history.
     const improvement = state?.improvement && state.improvement.version === start.opened.current.version ? state.improvement : null;
-    if (fromList) first = reopenView({ kept: Boolean(state?.improved), run: improvement?.status ?? null, left: loadView(id) }) ?? first;
+    if (fromList) first = reopenView({ kept: Boolean(state?.improved), run: improvement?.status ?? null, left: loadView(id), warned: Boolean(improvement?.warning) }) ?? first;
     if (first === "improve" && !improvement) first = STEPS[STEPS.length - 1]!.id;
     show(start, first, mode);
     kept = state?.improved ?? null;
@@ -596,7 +596,8 @@ async function main(): Promise<void> {
       downloaded = null;
       backToEditor();
       const run = improving ? (improving.kind === "sending" ? "running" : improving.kind) : null;
-      const to = reopenView({ kept: kept !== null, run, left: view });
+      const warned = improving?.kind === "ready" && Boolean(improving.improvement.warning);
+      const to = reopenView({ kept: kept !== null, run, left: view, warned });
       if (to && to !== view) go(to);
       return;
     }
